@@ -10,17 +10,8 @@ export function PageHero({
   children?: React.ReactNode;
 }) {
   return (
-    <section className="relative overflow-hidden bg-primary text-white">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.14]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, #ffffff 1px, transparent 1px)",
-          backgroundSize: "72px 100%",
-        }}
-      />
-      <Container className="relative py-16 sm:py-20">
+    <section className="bg-primary text-white">
+      <Container className="py-16 sm:py-20">
         {eyebrow ? (
           <p className="text-[0.7rem] font-medium tracking-[0.22em] text-white/80 uppercase">
             {eyebrow}
