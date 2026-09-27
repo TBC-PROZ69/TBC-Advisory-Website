@@ -15,6 +15,10 @@ function closeMobileNav() {
   if (toggle instanceof HTMLInputElement) toggle.checked = false;
 }
 
+function navItemActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function SiteHeader() {
   const pathname = usePathname();
 
@@ -35,16 +39,15 @@ export function SiteHeader() {
           <Wordmark className="h-16 sm:h-20" />
         </Link>
 
-        <nav aria-label="Primary" className="hidden items-center gap-7 lg:flex">
+        <nav aria-label="Primary" className="hidden items-center gap-5 lg:flex xl:gap-7">
           {nav.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const active = navItemActive(pathname, item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "text-[0.82rem] tracking-[0.04em] transition-colors hover:text-primary",
+                  "text-[0.82rem] tracking-[0.04em] whitespace-nowrap transition-colors hover:text-primary",
                   active ? "text-primary" : "text-foreground/80",
                 )}
               >
@@ -122,7 +125,7 @@ export function SiteHeader() {
                 onClick={closeMobileNav}
                 className={cn(
                   "rounded-md px-3 py-3 text-base",
-                  pathname === item.href
+                  navItemActive(pathname, item.href)
                     ? "bg-primary/10 text-primary"
                     : "text-foreground/80",
                 )}

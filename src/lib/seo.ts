@@ -38,6 +38,7 @@ export const publicRoutes = [
   "/how-we-work",
   "/for-boards",
   "/about",
+  "/insights",
   "/print",
   "/contact",
 ] as const;
