@@ -21,15 +21,7 @@ export default function InsightsPage() {
   return (
     <>
       <ProfessionalServiceJsonLd />
-      <PageHero eyebrow="For directors and officers" title="Insights">
-        <p>
-          Notes on the problems that stay on a board agenda: fees without a
-          standard, budgets that do not control the year, vendors that drift,
-          reserves that never become work, and what remains after a study is
-          filed. Counsel for HOA and COA boards — not a magazine, and not a
-          management company.
-        </p>
-      </PageHero>
+      <PageHero eyebrow="For directors and officers" title="Insights" />
 
       <section>
         <Container className="max-w-3xl py-16 sm:py-20">
