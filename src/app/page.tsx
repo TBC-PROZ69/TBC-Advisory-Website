@@ -56,10 +56,6 @@ export default function HomePage() {
             responsibility, and reduces over-reliance on a traditional
             management firm.
           </p>
-          <p className="mt-6 max-w-2xl text-sm leading-relaxed text-white/80">
-            Founder &amp; CEO · elected Director, $100M+ condominium ·
-            Landscape, Dock &amp; IT chair · ARB, Finance, Maintenance
-          </p>
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
             <CtaLink href="/contact" variant="cream">
               Request a free consultation
