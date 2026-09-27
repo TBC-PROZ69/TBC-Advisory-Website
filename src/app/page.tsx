@@ -51,10 +51,10 @@ export default function HomePage() {
             TBC Advisory is not a property management company.
           </p>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-white/90 sm:text-lg">
-            We work with board members who need a tailored operational
-            risk based roadmap—one that strengthens sustainability and fiscal
-            responsibility, and reduces over-reliance on a traditional
-            management firm.
+            We help board members run a tailored, risk-based operational
+            roadmap that strengthens sustainability and fiscal
+            responsibility—while reducing over-reliance on a traditional
+            property management firm.
           </p>
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
             <CtaLink href="/contact" variant="cream">
