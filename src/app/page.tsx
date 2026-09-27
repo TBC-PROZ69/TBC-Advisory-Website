@@ -69,7 +69,7 @@ export default function HomePage() {
             </CtaLink>
           </div>
           <p className="mt-8 text-sm text-white/80">
-            On-property signage or a tradeshow piece?{" "}
+            Need On-property signage or a tradeshow piece?{" "}
             <Link href="/print" className="text-white underline-offset-4 hover:underline">
               See TBC Print
             </Link>
