@@ -52,7 +52,7 @@ export default function HomePage() {
           </p>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-white/90 sm:text-lg">
             We work with board members who need a tailored operational
-            roadmap—one that strengthens sustainability and fiscal
+            risk based roadmap—one that strengthens sustainability and fiscal
             responsibility, and reduces over-reliance on a traditional
             management firm.
           </p>
