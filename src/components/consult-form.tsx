@@ -202,7 +202,7 @@ export function ConsultForm({
       <Button
         type="submit"
         disabled={status === "sending"}
-        className="h-11 rounded-md bg-navy px-6 text-[0.95rem] text-cream hover:bg-navy/90"
+        className="h-11 rounded-md bg-primary px-6 text-[0.95rem] text-primary-foreground hover:bg-primary/90"
       >
         {status === "sending" ? "Sending…" : "Request a free consultation"}
       </Button>

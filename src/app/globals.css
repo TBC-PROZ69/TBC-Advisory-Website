@@ -12,8 +12,8 @@
   --color-cream: var(--cream);
   --color-brass: var(--brass);
   --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-newsreader), ui-serif, Georgia, "Times New Roman",
-    serif;
+  --font-heading: var(--font-newsreader), "Times New Roman", Times, ui-serif,
+    Georgia, serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -53,43 +53,51 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+  Locked TBC Advisory brand (2026-09-10): #126BAE, #000000, #FFFFFF.
+  Utility names stay so existing classes do not churn:
+  - navy: near-black ink for body text and hairlines
+  - brass: brand blue accent (the brass gold is gone)
+  - cream: white, for type that sits on brand-blue bands
+  - primary: brand blue for CTAs and those bands
+*/
 :root {
-  --navy: #0b1c2c;
-  --ink: #08141f;
-  --cream: #f6f1e8;
-  --brass: #c4a46a;
-  --background: #f6f1e8;
-  --foreground: #1a1914;
-  --card: #fbf7f0;
-  --card-foreground: #1a1914;
-  --popover: #fbf7f0;
-  --popover-foreground: #1a1914;
-  --primary: #0b1c2c;
-  --primary-foreground: #f6f1e8;
-  --secondary: #e8e0d2;
-  --secondary-foreground: #0b1c2c;
-  --muted: #ede6d9;
-  --muted-foreground: #5c584f;
-  --accent: #e8e0d2;
-  --accent-foreground: #0b1c2c;
+  --navy: #111111;
+  --ink: #000000;
+  --cream: #ffffff;
+  --brass: #126bae;
+  --background: #f5f7fa;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #126bae;
+  --primary-foreground: #ffffff;
+  --secondary: #e7f2fa;
+  --secondary-foreground: #111111;
+  --muted: #eef2f6;
+  --muted-foreground: #3c4956;
+  --accent: #e7f2fa;
+  --accent-foreground: #0a4d80;
   --destructive: #9b2c2c;
-  --border: #d4cbb8;
-  --input: #d4cbb8;
-  --ring: #c4a46a;
-  --chart-1: #c4a46a;
-  --chart-2: #0b1c2c;
-  --chart-3: #5c584f;
-  --chart-4: #8a7a55;
-  --chart-5: #1a1914;
+  --border: #d5dee6;
+  --input: #d5dee6;
+  --ring: #126bae;
+  --chart-1: #126bae;
+  --chart-2: #0a4d80;
+  --chart-3: #3c4956;
+  --chart-4: #8eb4d4;
+  --chart-5: #111111;
   --radius: 0.375rem;
-  --sidebar: #fbf7f0;
-  --sidebar-foreground: #1a1914;
-  --sidebar-primary: #0b1c2c;
-  --sidebar-primary-foreground: #f6f1e8;
-  --sidebar-accent: #e8e0d2;
-  --sidebar-accent-foreground: #0b1c2c;
-  --sidebar-border: #d4cbb8;
-  --sidebar-ring: #c4a46a;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111111;
+  --sidebar-primary: #126bae;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e7f2fa;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #d5dee6;
+  --sidebar-ring: #126bae;
 }
 
 @layer base {

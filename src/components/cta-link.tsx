@@ -25,9 +25,9 @@ export function CtaLink({
     }),
     "h-11 rounded-md px-6 text-[0.95rem]",
     variant === "brass" &&
-      "border-transparent bg-brass text-navy hover:bg-brass/90",
+      "border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
     variant === "cream" &&
-      "border-transparent bg-cream text-navy hover:bg-cream/90",
+      "border-transparent bg-white text-primary hover:bg-white/90",
     variant === "outline" && "border-current bg-transparent",
     className,
   );

@@ -10,19 +10,19 @@ export function PageHero({
   children?: React.ReactNode;
 }) {
   return (
-    <section className="relative overflow-hidden bg-navy text-cream">
+    <section className="relative overflow-hidden bg-primary text-white">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.07]"
+        className="pointer-events-none absolute inset-0 opacity-[0.14]"
         style={{
           backgroundImage:
-            "linear-gradient(to right, #C4A46A 1px, transparent 1px)",
+            "linear-gradient(to right, #ffffff 1px, transparent 1px)",
           backgroundSize: "72px 100%",
         }}
       />
       <Container className="relative py-16 sm:py-20">
         {eyebrow ? (
-          <p className="text-[0.7rem] font-medium tracking-[0.22em] text-brass uppercase">
+          <p className="text-[0.7rem] font-medium tracking-[0.22em] text-white/80 uppercase">
             {eyebrow}
           </p>
         ) : null}
@@ -30,7 +30,7 @@ export function PageHero({
           {title}
         </h1>
         {children ? (
-          <div className="mt-6 max-w-2xl text-base leading-relaxed text-cream/80 sm:text-lg">
+          <div className="mt-6 max-w-2xl text-base leading-relaxed text-white/90 sm:text-lg">
             {children}
           </div>
         ) : null}

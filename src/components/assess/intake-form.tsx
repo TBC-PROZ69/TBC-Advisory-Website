@@ -111,7 +111,7 @@ export function IntakeForm({
               className={cn(
                 "min-h-24 rounded-md border px-5 py-6 text-left text-xl font-heading text-navy",
                 value.associationType === code
-                  ? "border-brass bg-navy text-cream"
+                  ? "border-primary bg-primary text-white"
                   : "border-navy/15 bg-card hover:border-navy/40",
               )}
             >
@@ -199,7 +199,7 @@ export function IntakeForm({
               className={cn(
                 "h-11 rounded-md border px-5 text-sm",
                 value.has3plus === flag
-                  ? "border-navy bg-navy text-cream"
+                  ? "border-primary bg-primary text-white"
                   : "border-navy/15 bg-white",
               )}
               onClick={() => set("has3plus", flag)}
@@ -290,7 +290,7 @@ export function IntakeForm({
 
       <Button
         type="submit"
-        className="h-11 rounded-md bg-navy px-6 text-cream hover:bg-navy/90"
+        className="h-11 rounded-md bg-primary px-6 text-white hover:bg-primary/90"
       >
         Continue to questions
       </Button>

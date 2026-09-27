@@ -120,8 +120,8 @@ export function roadmapHtml(
           .map((question) => {
             const answer = answers[question.id] || "Unknown";
             return `<tr>
-              <td style="border-top:1px solid #d4cbb8;vertical-align:top"><strong>${escapeHtml(question.id)}</strong><br/>${escapeHtml(answer)}</td>
-              <td style="border-top:1px solid #d4cbb8">${escapeHtml(question.question)}<br/><em>${escapeHtml(question.cite)}</em><br/>Board action: resolve this item using ${escapeHtml(question.cite)}.</td>
+              <td style="border-top:1px solid #d5dee6;vertical-align:top"><strong>${escapeHtml(question.id)}</strong><br/>${escapeHtml(answer)}</td>
+              <td style="border-top:1px solid #d5dee6">${escapeHtml(question.question)}<br/><em>${escapeHtml(question.cite)}</em><br/>Board action: resolve this item using ${escapeHtml(question.cite)}.</td>
             </tr>`;
           })
           .join("")}</table>`;
@@ -139,7 +139,7 @@ export function roadmapHtml(
   const domainRows = roadmap.domains
     .map(
       (domain) =>
-        `<tr><td style="border-top:1px solid #d4cbb8">${escapeHtml(domain.domain)}</td><td style="border-top:1px solid #d4cbb8">${scoreLabel(domain.score)}</td><td style="border-top:1px solid #d4cbb8">${escapeHtml(domain.band)}</td></tr>`,
+        `<tr><td style="border-top:1px solid #d5dee6">${escapeHtml(domain.domain)}</td><td style="border-top:1px solid #d5dee6">${scoreLabel(domain.score)}</td><td style="border-top:1px solid #d5dee6">${escapeHtml(domain.band)}</td></tr>`,
     )
     .join("");
 
@@ -148,22 +148,22 @@ export function roadmapHtml(
       const answer = answers[question.id] || "Unknown";
       const note = itemNotes[question.id]?.trim() || "";
       return `<tr>
-        <td style="border-top:1px solid #d4cbb8">${escapeHtml(question.id)}</td>
-        <td style="border-top:1px solid #d4cbb8">${escapeHtml(question.domain)}</td>
-        <td style="border-top:1px solid #d4cbb8">${escapeHtml(answer)}</td>
-        <td style="border-top:1px solid #d4cbb8">${escapeHtml(note)}</td>
+        <td style="border-top:1px solid #d5dee6">${escapeHtml(question.id)}</td>
+        <td style="border-top:1px solid #d5dee6">${escapeHtml(question.domain)}</td>
+        <td style="border-top:1px solid #d5dee6">${escapeHtml(answer)}</td>
+        <td style="border-top:1px solid #d5dee6">${escapeHtml(note)}</td>
       </tr>`;
     })
     .join("");
 
   return `<!DOCTYPE html>
-<html><body style="font-family:Georgia,serif;color:#1a1914;background:#f6f1e8;padding:24px">
-  <div style="max-width:760px;margin:0 auto;background:#fbf7f0;padding:28px;border:1px solid #d4cbb8">
-    <p style="letter-spacing:0.18em;text-transform:uppercase;color:#c4a46a;font-size:12px">TBC Advisory</p>
-    <h1 style="font-size:28px;color:#0b1c2c">Operational screening roadmap</h1>
+<html><body style="font-family:Georgia,serif;color:#111111;background:#f5f7fa;padding:24px">
+  <div style="max-width:760px;margin:0 auto;background:#ffffff;padding:28px;border:1px solid #d5dee6">
+    <p style="letter-spacing:0.18em;text-transform:uppercase;color:#126bae;font-size:12px">TBC Advisory</p>
+    <h1 style="font-size:28px;color:#111111">Operational screening roadmap</h1>
     <p>Screening tool — not legal advice, not an engineering inspection. TBC Advisory is not a property management company.</p>
 
-    <h2 style="color:#0b1c2c">1. Snapshot</h2>
+    <h2 style="color:#111111">1. Snapshot</h2>
     <p>
       <strong>${escapeHtml(intake.associationName)}</strong><br/>
       Type: ${escapeHtml(intake.associationType)} · ${escapeHtml(intake.county)} County<br/>
@@ -176,16 +176,16 @@ export function roadmapHtml(
     </p>
     ${intake.notes ? `<p>Notes: ${escapeHtml(intake.notes)}</p>` : ""}
 
-    <h2 style="color:#0b1c2c">2. Critical items</h2>
+    <h2 style="color:#111111">2. Critical items</h2>
     ${criticalRows}
 
-    <h2 style="color:#0b1c2c">3. Domain scores</h2>
+    <h2 style="color:#111111">3. Domain scores</h2>
     <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse">
       <tr><th align="left">Domain</th><th align="left">Score</th><th align="left">Band</th></tr>
       ${domainRows}
     </table>
 
-    <h2 style="color:#0b1c2c">4. Prioritized 30 / 60 / 90-day actions</h2>
+    <h2 style="color:#111111">4. Prioritized 30 / 60 / 90-day actions</h2>
     <h3>30 days</h3>
     ${actionList(groups.d30)}
     <h3>60 days</h3>
@@ -193,13 +193,13 @@ export function roadmapHtml(
     <h3>90 days</h3>
     ${actionList(groups.d90)}
 
-    <h2 style="color:#0b1c2c">5. Full answer appendix</h2>
+    <h2 style="color:#111111">5. Full answer appendix</h2>
     <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse:collapse">
       <tr><th align="left">ID</th><th align="left">Domain</th><th align="left">Answer</th><th align="left">Notes</th></tr>
       ${appendix}
     </table>
 
-    <p style="margin-top:32px;font-size:13px;color:#5c584f">Screening tool — not legal advice, not an engineering inspection.</p>
+    <p style="margin-top:32px;font-size:13px;color:#3c4956">Screening tool — not legal advice, not an engineering inspection.</p>
   </div>
 </body></html>`;
 }
