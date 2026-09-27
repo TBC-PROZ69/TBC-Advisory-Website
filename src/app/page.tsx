@@ -38,17 +38,8 @@ export default function HomePage() {
   return (
     <>
       <ProfessionalServiceJsonLd />
-      <section className="relative overflow-hidden bg-primary text-white">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.14]"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, #ffffff 1px, transparent 1px)",
-            backgroundSize: "80px 100%",
-          }}
-        />
-        <Container className="relative flex min-h-[calc(100svh-5rem)] flex-col justify-center py-16 sm:min-h-[calc(100svh-6rem)] sm:py-20">
+      <section className="bg-primary text-white">
+        <Container className="flex min-h-[calc(100svh-5rem)] flex-col justify-center py-16 sm:min-h-[calc(100svh-6rem)] sm:py-20">
           <p className="text-[0.7rem] font-medium tracking-[0.22em] text-white/80 uppercase">
             Independent consultancy · HOA & COA boards
           </p>
