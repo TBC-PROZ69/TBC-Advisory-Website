@@ -38,52 +38,52 @@ export default function HomePage() {
   return (
     <>
       <ProfessionalServiceJsonLd />
-      <section className="relative overflow-hidden bg-navy text-cream">
+      <section className="relative overflow-hidden bg-primary text-white">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.08]"
+          className="pointer-events-none absolute inset-0 opacity-[0.14]"
           style={{
             backgroundImage:
-              "linear-gradient(to right, #C4A46A 1px, transparent 1px)",
+              "linear-gradient(to right, #ffffff 1px, transparent 1px)",
             backgroundSize: "80px 100%",
           }}
         />
-        <Container className="relative flex min-h-[calc(100svh-4.25rem)] flex-col justify-center py-16 sm:py-20">
-          <p className="text-[0.7rem] font-medium tracking-[0.22em] text-brass uppercase">
+        <Container className="relative flex min-h-[calc(100svh-5rem)] flex-col justify-center py-16 sm:min-h-[calc(100svh-6rem)] sm:py-20">
+          <p className="text-[0.7rem] font-medium tracking-[0.22em] text-white/80 uppercase">
             Independent consultancy · HOA & COA boards
           </p>
           <h1 className="font-heading mt-4 max-w-3xl text-4xl leading-[1.12] tracking-tight text-balance sm:text-5xl lg:text-6xl">
             Independent counsel for HOA and COA boards
           </h1>
-          <div className="mt-6 h-px w-16 bg-brass" />
-          <p className="mt-6 max-w-2xl text-xl leading-snug text-cream sm:text-2xl">
+          <div className="mt-6 h-px w-16 bg-white" />
+          <p className="mt-6 max-w-2xl text-xl leading-snug text-white sm:text-2xl">
             TBC Advisory is not a property management company.
           </p>
-          <p className="mt-4 max-w-2xl text-base leading-relaxed text-cream/75 sm:text-lg">
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-white/90 sm:text-lg">
             We work with board members who need a tailored operational
             roadmap—one that strengthens sustainability and fiscal
             responsibility, and reduces over-reliance on a traditional
             management firm.
           </p>
-          <p className="mt-6 max-w-2xl text-sm leading-relaxed text-cream/55">
+          <p className="mt-6 max-w-2xl text-sm leading-relaxed text-white/80">
             Founder &amp; CEO · elected Director, $100M+ condominium ·
             Landscape, Dock &amp; IT chair · ARB, Finance, Maintenance
           </p>
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-            <CtaLink href="/contact" variant="brass">
+            <CtaLink href="/contact" variant="cream">
               Request a free consultation
             </CtaLink>
             <CtaLink
               href="/how-we-work"
               variant="outline"
-              className="border-cream/40 text-cream hover:bg-white/5 hover:text-cream"
+              className="border-white/50 text-white hover:bg-white/10 hover:text-white"
             >
               How we work
             </CtaLink>
           </div>
-          <p className="mt-8 text-sm text-cream/55">
+          <p className="mt-8 text-sm text-white/80">
             On-property signage or a tradeshow piece?{" "}
-            <Link href="/print" className="text-brass underline-offset-4 hover:underline">
+            <Link href="/print" className="text-white underline-offset-4 hover:underline">
               See TBC Print
             </Link>
             .
@@ -153,26 +153,26 @@ export default function HomePage() {
         </Container>
       </section>
 
-      <section className="bg-navy/95 text-cream">
+      <section className="bg-primary text-white">
         <Container className="py-16 sm:py-20">
-          <p className="text-[0.7rem] font-medium tracking-[0.18em] text-brass uppercase">
+          <p className="text-[0.7rem] font-medium tracking-[0.18em] text-white/80 uppercase">
             How we work
           </p>
           <h2 className="font-heading mt-3 max-w-2xl text-3xl tracking-tight sm:text-4xl">
             Four steps. Advisory, not occupancy.
           </h2>
-          <p className="mt-4 max-w-2xl text-base leading-relaxed text-cream/70">
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-white/85">
             Discovery, assessment, an operational roadmap, then implementation
             support. We stay close to the work. We do not move in.
           </p>
           <ol className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {engagementSteps.map((step) => (
               <li key={step.number}>
-                <p className="text-[0.7rem] tracking-[0.16em] text-brass uppercase">
+                <p className="text-[0.7rem] tracking-[0.16em] text-white/80 uppercase">
                   {step.number}
                 </p>
                 <h3 className="font-heading mt-2 text-xl">{step.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-cream/65">
+                <p className="mt-3 text-sm leading-relaxed text-white/85">
                   {step.summary}
                 </p>
               </li>
@@ -182,7 +182,7 @@ export default function HomePage() {
             <CtaLink
               href="/how-we-work"
               variant="outline"
-              className="border-cream/35 text-cream hover:bg-white/5 hover:text-cream"
+              className="border-white/50 text-white hover:bg-white/10 hover:text-white"
             >
               The engagement in full
             </CtaLink>

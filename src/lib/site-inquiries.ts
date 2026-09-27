@@ -125,12 +125,12 @@ function dl(rows: Array<[string, string]>) {
 
 function wrapHtml(title: string, inner: string) {
   return `<!DOCTYPE html>
-<html><body style="font-family:Georgia,serif;color:#1a1914;background:#f6f1e8;padding:24px">
-  <div style="max-width:640px;margin:0 auto;background:#fbf7f0;padding:28px;border:1px solid #d4cbb8">
-    <p style="letter-spacing:0.18em;text-transform:uppercase;color:#c4a46a;font-size:12px">TBC Advisory</p>
-    <h1 style="font-size:24px;color:#0b1c2c">${escapeHtml(title)}</h1>
+<html><body style="font-family:Georgia,serif;color:#111111;background:#f5f7fa;padding:24px">
+  <div style="max-width:640px;margin:0 auto;background:#ffffff;padding:28px;border:1px solid #d5dee6">
+    <p style="letter-spacing:0.18em;text-transform:uppercase;color:#126bae;font-size:12px">TBC Advisory</p>
+    <h1 style="font-size:24px;color:#111111">${escapeHtml(title)}</h1>
     ${inner}
-    <p style="margin-top:28px;font-size:13px;color:#5c584f">Reply to this email to reach the visitor.</p>
+    <p style="margin-top:28px;font-size:13px;color:#3c4956">Reply to this email to reach the visitor.</p>
   </div>
 </body></html>`;
 }

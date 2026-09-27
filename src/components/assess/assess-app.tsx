@@ -290,7 +290,7 @@ function QuestionStep({
                   className={cn(
                     "h-10 rounded-md border px-3 text-sm",
                     answers[question.id] === answer
-                      ? "border-navy bg-navy text-cream"
+                      ? "border-primary bg-primary text-white"
                       : "border-navy/15 bg-white text-navy",
                   )}
                   onClick={() => onAnswer(question.id, answer)}
@@ -321,7 +321,7 @@ function QuestionStep({
         </Button>
         <Button
           type="button"
-          className="h-11 bg-navy text-cream hover:bg-navy/90"
+          className="h-11 bg-primary text-white hover:bg-primary/90"
           onClick={onNext}
         >
           {domainIndex >= domains.length - 1 ? "Review" : "Next domain"}
@@ -387,7 +387,7 @@ function ReviewStep({
         </Button>
         <Button
           type="button"
-          className="h-11 bg-navy text-cream hover:bg-navy/90"
+          className="h-11 bg-primary text-white hover:bg-primary/90"
           disabled={submitting}
           onClick={onSubmit}
         >

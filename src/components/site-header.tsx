@@ -19,20 +19,20 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-brass/30 bg-navy text-cream">
+    <header className="sticky top-0 z-40 border-b border-border bg-white text-foreground">
       <input
         id="mobile-nav-toggle"
         type="checkbox"
         className="peer sr-only"
         aria-controls="mobile-nav"
       />
-      <Container className="relative z-10 flex h-[4.25rem] items-center justify-between gap-4">
+      <Container className="relative z-10 flex h-20 items-center justify-between gap-4 sm:h-24">
         <Link
           href="/"
           aria-label="TBC Advisory home"
-          className="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass"
+          className="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <Wordmark inverted />
+          <Wordmark className="h-16 sm:h-20" />
         </Link>
 
         <nav aria-label="Primary" className="hidden items-center gap-7 lg:flex">
@@ -44,8 +44,8 @@ export function SiteHeader() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "text-[0.82rem] tracking-[0.04em] transition-colors hover:text-brass",
-                  active ? "text-brass" : "text-cream/85",
+                  "text-[0.82rem] tracking-[0.04em] transition-colors hover:text-primary",
+                  active ? "text-primary" : "text-foreground/80",
                 )}
               >
                 {item.label}
@@ -62,7 +62,7 @@ export function SiteHeader() {
 
         <label
           htmlFor="mobile-nav-toggle"
-          className="inline-flex size-10 cursor-pointer items-center justify-center rounded-md text-cream hover:bg-white/10 lg:hidden"
+          className="inline-flex size-10 cursor-pointer items-center justify-center rounded-md text-foreground hover:bg-primary/5 lg:hidden"
           aria-label="Open menu"
         >
           <Menu className="size-5" />
@@ -83,20 +83,20 @@ export function SiteHeader() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="mobile-nav-title"
-          className="relative ml-auto flex h-full w-[min(20rem,88vw)] flex-col border-l border-navy/10 bg-cream text-navy shadow-2xl"
+          className="relative ml-auto flex h-full w-[min(20rem,88vw)] flex-col border-l border-border bg-white text-foreground shadow-2xl"
         >
-          <div className="flex items-start justify-between gap-4 border-b border-navy/10 p-5">
+          <div className="flex items-start justify-between gap-4 border-b border-border p-5">
             <div>
-              <p id="mobile-nav-title" className="font-heading text-lg text-navy">
+              <p id="mobile-nav-title" className="font-heading text-lg text-foreground">
                 TBC Advisory
               </p>
-              <p className="mt-1 text-sm text-navy/60">
-                Independent counsel for HOA and COA boards.
+              <p className="mt-1 text-sm text-primary">
+                Independent Partner to HOA & COA Boards
               </p>
             </div>
             <label
               htmlFor="mobile-nav-toggle"
-              className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md text-navy hover:bg-navy/5"
+              className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md text-foreground hover:bg-primary/5"
             >
               <X className="size-5" />
               <span className="sr-only">Close menu</span>
@@ -108,7 +108,9 @@ export function SiteHeader() {
               onClick={closeMobileNav}
               className={cn(
                 "rounded-md px-3 py-3 text-base",
-                pathname === "/" ? "bg-navy/5 text-navy" : "text-navy/80",
+                pathname === "/"
+                  ? "bg-primary/10 text-primary"
+                  : "text-foreground/80",
               )}
             >
               Home
@@ -120,7 +122,9 @@ export function SiteHeader() {
                 onClick={closeMobileNav}
                 className={cn(
                   "rounded-md px-3 py-3 text-base",
-                  pathname === item.href ? "bg-navy/5 text-navy" : "text-navy/80",
+                  pathname === item.href
+                    ? "bg-primary/10 text-primary"
+                    : "text-foreground/80",
                 )}
               >
                 {item.label}
