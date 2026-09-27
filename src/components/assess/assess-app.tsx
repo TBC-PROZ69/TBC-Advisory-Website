@@ -1,8 +1,21 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { IntakeForm } from "@/components/assess/intake-form";
+import {
+  goToNextDomain,
+  goToPreviousDomain,
+  withAnswer,
+  withItemNote,
+} from "@/components/assess/navigate";
 import {
   emptyDraft,
   getServerDraft,
@@ -14,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/container";
 import { applicableQuestions, mileApplies } from "@/lib/assessment/applicability";
+import { statuteTrackLabel } from "@/lib/assessment/tracks";
 import { DOMAIN_ORDER, type AnswerValue, type IntakeData } from "@/lib/assessment/types";
 import type { AssessmentQuestion } from "@/lib/assessment/types";
 import { cn } from "@/lib/utils";
@@ -25,8 +39,11 @@ export function AssessApp({ accessKey }: { accessKey?: string }) {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  function update(next: AssessDraft) {
-    saveDraft(next);
+  // Always patch the latest snapshot. Handlers that spread a closed-over
+  // `draft` let a note write landing after Next replace the whole record and
+  // rewind domainIndex, so the wizard looks stuck between domains.
+  function update(recipe: (current: AssessDraft) => AssessDraft) {
+    saveDraft(recipe(loadDraft()));
   }
 
   const facts = useMemo(() => {
@@ -111,14 +128,14 @@ export function AssessApp({ accessKey }: { accessKey?: string }) {
           <div className="mt-10">
             <IntakeForm
               value={draft.intake}
-              onChange={(intake) => update({ ...draft, intake })}
+              onChange={(intake) => update((current) => ({ ...current, intake }))}
               onContinue={(intake) =>
-                update({
-                  ...draft,
+                update((current) => ({
+                  ...current,
                   intake,
                   step: "questions",
                   domainIndex: 0,
-                })
+                }))
               }
             />
           </div>
@@ -127,37 +144,25 @@ export function AssessApp({ accessKey }: { accessKey?: string }) {
         {draft.step === "questions" && facts ? (
           <QuestionStep
             domains={domains}
-            domainIndex={Math.min(draft.domainIndex, Math.max(domains.length - 1, 0))}
+            domainIndex={Math.min(
+              Number.isInteger(draft.domainIndex) ? draft.domainIndex : 0,
+              Math.max(domains.length - 1, 0),
+            )}
+            trackLabel={statuteTrackLabel(facts.type)}
             questions={questions}
             answers={draft.answers}
             notes={draft.itemNotes}
             showMileNote={mileApplies(facts)}
-            onBack={() => {
-              if (draft.domainIndex <= 0) {
-                update({ ...draft, step: "intake" });
-                return;
-              }
-              update({ ...draft, domainIndex: draft.domainIndex - 1 });
-            }}
+            onBack={() => update(goToPreviousDomain)}
             onNotes={(id, note) =>
-              update({
-                ...draft,
-                itemNotes: { ...draft.itemNotes, [id]: note },
-              })
+              update((current) => withItemNote(current, id, note))
             }
             onAnswer={(id, answer) =>
-              update({
-                ...draft,
-                answers: { ...draft.answers, [id]: answer },
-              })
+              update((current) => withAnswer(current, id, answer))
             }
-            onNext={() => {
-              if (draft.domainIndex >= domains.length - 1) {
-                update({ ...draft, step: "review" });
-                return;
-              }
-              update({ ...draft, domainIndex: draft.domainIndex + 1 });
-            }}
+            onNext={() =>
+              update((current) => goToNextDomain(current, domains.length))
+            }
           />
         ) : null}
 
@@ -168,11 +173,11 @@ export function AssessApp({ accessKey }: { accessKey?: string }) {
             error={submitError}
             submitting={submitting}
             onBack={() =>
-              update({
-                ...draft,
+              update((current) => ({
+                ...current,
                 step: "questions",
                 domainIndex: Math.max(domains.length - 1, 0),
-              })
+              }))
             }
             onSubmit={async () => {
               if (!isCompleteIntake(draft.intake)) return;
@@ -234,6 +239,7 @@ function isCompleteIntake(
 function QuestionStep({
   domains,
   domainIndex,
+  trackLabel,
   questions,
   answers,
   notes,
@@ -245,6 +251,7 @@ function QuestionStep({
 }: {
   domains: typeof DOMAIN_ORDER;
   domainIndex: number;
+  trackLabel: string;
   questions: AssessmentQuestion[];
   answers: AssessDraft["answers"];
   notes: Record<string, string>;
@@ -256,14 +263,38 @@ function QuestionStep({
 }) {
   const domain = domains[domainIndex];
   const items = questions.filter((question) => question.domain === domain);
+  const startRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    const start = startRef.current;
+    const heading = headingRef.current;
+    if (!start || !heading) return;
+    // Scroll anchoring would otherwise pin the viewport to the Next button
+    // after the question list is replaced, so the new domain never comes into view.
+    const align = () => {
+      const top = start.getBoundingClientRect().top + window.scrollY - 16;
+      window.scrollTo(0, Math.max(0, top));
+    };
+    align();
+    const frame = requestAnimationFrame(align);
+    heading.focus({ preventScroll: true });
+    return () => cancelAnimationFrame(frame);
+  }, [domainIndex, domain]);
 
   return (
-    <div className="mt-10 space-y-8">
-      <div>
+    <div className="mt-10 space-y-8 [overflow-anchor:none]">
+      <div ref={startRef}>
         <p className="text-xs tracking-[0.16em] text-brass uppercase">
-          {domainIndex + 1} / {domains.length}
+          {trackLabel} · {domainIndex + 1} / {domains.length}
         </p>
-        <h2 className="font-heading mt-2 text-2xl text-navy">{domain}</h2>
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="font-heading mt-2 text-2xl text-navy outline-none"
+        >
+          {domain}
+        </h2>
       </div>
       {showMileNote && domain === "Milestone/Safety" ? (
         <p className="rounded-md border border-navy/15 bg-card p-4 text-sm text-navy/75">
@@ -311,21 +342,12 @@ function QuestionStep({
         ))}
       </ol>
       <div className="flex flex-wrap gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11"
-          onClick={onBack}
-        >
+        <WizardButton variant="outline" onPress={onBack}>
           Back
-        </Button>
-        <Button
-          type="button"
-          className="h-11 bg-primary text-white hover:bg-primary/90"
-          onClick={onNext}
-        >
+        </WizardButton>
+        <WizardButton onPress={onNext}>
           {domainIndex >= domains.length - 1 ? "Review" : "Next domain"}
-        </Button>
+        </WizardButton>
       </div>
     </div>
   );
@@ -346,9 +368,30 @@ function ReviewStep({
   onBack: () => void;
   onSubmit: () => void;
 }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const trackLabel =
+    draft.intake.associationType === "HOA" ||
+    draft.intake.associationType === "COA"
+      ? statuteTrackLabel(draft.intake.associationType)
+      : null;
+
+  useEffect(() => {
+    const heading = headingRef.current;
+    if (!heading) return;
+    const top = heading.getBoundingClientRect().top + window.scrollY - 16;
+    window.scrollTo(0, Math.max(0, top));
+    heading.focus({ preventScroll: true });
+  }, []);
+
   return (
     <div className="mt-10 space-y-8 print:mt-0">
-      <h2 className="font-heading text-2xl text-navy">Review</h2>
+      <h2
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-heading scroll-mt-6 text-2xl text-navy outline-none"
+      >
+        Review
+      </h2>
       <p className="text-sm text-navy/70">
         Print this page for the board if useful. Scores are not shown here.
       </p>
@@ -360,7 +403,8 @@ function ReviewStep({
         <div>
           <dt className="text-navy/45">Type</dt>
           <dd>
-            {draft.intake.associationType} · {draft.intake.county} County
+            {trackLabel ?? draft.intake.associationType} · {draft.intake.county}{" "}
+            County
           </dd>
         </div>
       </dl>
@@ -382,18 +426,65 @@ function ReviewStep({
       </ol>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <div className="flex flex-wrap gap-3 print:hidden">
-        <Button type="button" variant="outline" className="h-11" onClick={onBack}>
+        <WizardButton variant="outline" onPress={onBack}>
           Back
-        </Button>
-        <Button
-          type="button"
-          className="h-11 bg-primary text-white hover:bg-primary/90"
-          disabled={submitting}
-          onClick={onSubmit}
-        >
+        </WizardButton>
+        <WizardButton disabled={submitting} onPress={onSubmit}>
           {submitting ? "Submitting…" : "Submit to TBC Advisory"}
-        </Button>
+        </WizardButton>
       </div>
     </div>
+  );
+}
+
+function WizardButton({
+  onPress,
+  children,
+  variant = "default",
+  disabled = false,
+}: {
+  onPress: () => void;
+  children: React.ReactNode;
+  variant?: "default" | "outline";
+  disabled?: boolean;
+}) {
+  const ignoreClickUntil = useRef(0);
+
+  return (
+    <Button
+      type="button"
+      variant={variant}
+      disabled={disabled}
+      className={cn(
+        "h-11",
+        variant === "default" && "bg-primary text-white hover:bg-primary/90",
+      )}
+      onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+        if (disabled) return;
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        // A focused note field swallows the tap: the browser blurs the input
+        // and never delivers click. preventDefault keeps the activation.
+        event.preventDefault();
+      }}
+      onPointerUp={(event: ReactPointerEvent<HTMLButtonElement>) => {
+        if (disabled || event.pointerType === "mouse") return;
+        const box = event.currentTarget.getBoundingClientRect();
+        const inside =
+          event.clientX >= box.left &&
+          event.clientX <= box.right &&
+          event.clientY >= box.top &&
+          event.clientY <= box.bottom;
+        if (!inside) return;
+        ignoreClickUntil.current = performance.now() + 400;
+        onPress();
+      }}
+      onClick={() => {
+        if (disabled) return;
+        if (performance.now() < ignoreClickUntil.current) return;
+        onPress();
+      }}
+    >
+      {children}
+    </Button>
   );
 }
