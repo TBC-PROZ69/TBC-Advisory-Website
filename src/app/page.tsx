@@ -52,13 +52,9 @@ export default function HomePage() {
           </p>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-white/90 sm:text-lg">
             We work with board members who need a tailored operational
-            roadmap—one that strengthens sustainability and fiscal
+            risk based roadmap—one that strengthens sustainability and fiscal
             responsibility, and reduces over-reliance on a traditional
             management firm.
-          </p>
-          <p className="mt-6 max-w-2xl text-sm leading-relaxed text-white/80">
-            Founder &amp; CEO · elected Director, $100M+ condominium ·
-            Landscape, Dock &amp; IT chair · ARB, Finance, Maintenance
           </p>
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
             <CtaLink href="/contact" variant="cream">
@@ -73,7 +69,7 @@ export default function HomePage() {
             </CtaLink>
           </div>
           <p className="mt-8 text-sm text-white/80">
-            On-property signage or a tradeshow piece?{" "}
+            Need On-property signage or a tradeshow piece?{" "}
             <Link href="/print" className="text-white underline-offset-4 hover:underline">
               See TBC Print
             </Link>
