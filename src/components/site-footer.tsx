@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { Container } from "@/components/container";
 import { Wordmark } from "@/components/wordmark";
-import { site } from "@/lib/site";
+import { nav, site } from "@/lib/site";
 
 export function SiteFooter() {
   return (
@@ -52,31 +52,13 @@ export function SiteFooter() {
             Site
           </p>
           <ul className="mt-3 space-y-2 text-sm text-foreground/80">
-            <li>
-              <Link href="/how-we-work" className="hover:text-primary">
-                How we work
-              </Link>
-            </li>
-            <li>
-              <Link href="/for-boards" className="hover:text-primary">
-                For boards
-              </Link>
-            </li>
-            <li>
-              <Link href="/about" className="hover:text-primary">
-                About
-              </Link>
-            </li>
-            <li>
-              <Link href="/print" className="hover:text-primary">
-                Print
-              </Link>
-            </li>
-            <li>
-              <Link href="/contact" className="hover:text-primary">
-                Contact
-              </Link>
-            </li>
+            {nav.map((item) => (
+              <li key={item.href}>
+                <Link href={item.href} className="hover:text-primary">
+                  {item.label}
+                </Link>
+              </li>
+            ))}
           </ul>
         </div>
       </Container>

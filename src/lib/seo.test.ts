@@ -71,19 +71,43 @@ describe("public page metadata", () => {
 });
 
 describe("sitemap and robots", () => {
-  it("lists www public URLs, omits /assess, and uses a real lastmod", () => {
+  it("lists www public URLs, insight posts, omits /assess, and uses a real lastmod", () => {
     const entries = sitemap();
     const urls = entries.map((entry) => entry.url);
+    const insightPaths = [
+      "/insights/reserves-into-planned-work",
+      "/insights/when-vendors-drift",
+      "/insights/after-the-sirs",
+      "/insights/budget-is-not-control",
+      "/insights/fees-vs-accountability",
+    ];
 
-    expect(urls).toEqual(publicRoutes.map((path) => sitemapLoc(path)));
+    expect(urls).toEqual([
+      ...publicRoutes.map((path) => sitemapLoc(path)),
+      ...insightPaths.map((path) => sitemapLoc(path)),
+    ]);
     expect(urls.some((url) => url.includes("assess"))).toBe(false);
     expect(urls.every((url) => !url.endsWith("/") || url === site.url)).toBe(
       true,
     );
 
     for (const entry of entries) {
+      const path = entry.url.replace(site.url, "") || "";
+      if (path.startsWith("/insights/")) {
+        expect(entry.lastModified).toBeInstanceOf(Date);
+        continue;
+      }
+      if (path === "/insights") {
+        expect(entry.lastModified).toEqual(new Date("2026-09-24T00:00:00.000Z"));
+        continue;
+      }
       expect(entry.lastModified).toEqual(new Date(SITE_LASTMOD));
     }
+
+    const sirs = entries.find((entry) =>
+      entry.url.endsWith("/insights/after-the-sirs"),
+    );
+    expect(sirs?.lastModified).toEqual(new Date("2026-09-17T00:00:00.000Z"));
   });
 
   it("points robots.txt at the www sitemap and disallows /assess", () => {

@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    "/insights": ["./content/insights/**/*"],
+    "/insights/*": ["./content/insights/**/*"],
+    "/sitemap.xml": ["./content/insights/**/*"],
+  },
   async headers() {
     return [
       {
