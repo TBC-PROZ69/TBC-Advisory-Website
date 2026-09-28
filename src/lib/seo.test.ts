@@ -75,6 +75,7 @@ describe("sitemap and robots", () => {
     const entries = sitemap();
     const urls = entries.map((entry) => entry.url);
     const insightPaths = [
+      "/insights/community-communication-practices",
       "/insights/reserves-into-planned-work",
       "/insights/when-vendors-drift",
       "/insights/after-the-sirs",
@@ -98,7 +99,7 @@ describe("sitemap and robots", () => {
         continue;
       }
       if (path === "/insights") {
-        expect(entry.lastModified).toEqual(new Date("2026-09-24T00:00:00.000Z"));
+        expect(entry.lastModified).toEqual(new Date("2026-09-28T00:00:00.000Z"));
         continue;
       }
       expect(entry.lastModified).toEqual(new Date(SITE_LASTMOD));
