@@ -4,6 +4,12 @@ import { formatInsightDate, getInsight, getInsights } from "@/lib/insights";
 
 const published = [
   {
+    slug: "community-communication-practices",
+    date: "2026-09-28",
+    title: '"We posted it in the lobby" is not a communications plan',
+    linkedInUrl: undefined,
+  },
+  {
     slug: "reserves-into-planned-work",
     date: "2026-09-24",
     title: "Reserves are supposed to turn surprises into planned work",
@@ -48,7 +54,7 @@ function wordCount(markdown: string): number {
 }
 
 describe("published insights", () => {
-  it("lists only the five published posts, newest first", () => {
+  it("lists only the published posts, newest first", () => {
     const posts = getInsights();
     expect(posts.map((post) => post.slug)).toEqual(
       published.map((post) => post.slug),
