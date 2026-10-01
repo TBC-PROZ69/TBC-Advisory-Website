@@ -5,9 +5,7 @@ date: "2026-10-01"
 slug: aesthetics-in-the-plan
 ---
 
-Saying “no” to every aesthetic request feels responsible.
-
-It often backfires.
+Saying “no” to every aesthetic request feels responsible. It often backfires.
 
 Owners conclude the board does not care how the community looks. Pressure builds in the lobby, the parking lot, and the open forum. The next meeting fills with granite, plantings, and paint — while the envelope item that needed a bid never quite makes the packet.
 
@@ -72,8 +70,6 @@ We help board officers:
 - Stay in the counsel seat while the board keeps control
 
 At TBC Advisory we take a risk-based approach assisting boards to focus on the most critical issues. We partner with directors and officers to identify operational gaps by assessing operations as they stand, then build tailored roadmaps with strategic touchpoints that support the board as they execute the plan.
-
-## Closing
 
 Owners are not wrong to want a community that looks cared for.
 
