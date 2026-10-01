@@ -4,6 +4,12 @@ import { formatInsightDate, getInsight, getInsights } from "@/lib/insights";
 
 const published = [
   {
+    slug: "aesthetics-in-the-plan",
+    date: "2026-10-01",
+    title: "How to keep aesthetics in the plan without letting them steal the plan",
+    linkedInUrl: undefined,
+  },
+  {
     slug: "community-communication-practices",
     date: "2026-09-28",
     title: '"We posted it in the lobby" is not a communications plan',
