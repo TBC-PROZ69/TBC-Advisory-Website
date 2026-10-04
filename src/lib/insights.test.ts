@@ -4,6 +4,12 @@ import { formatInsightDate, getInsight, getInsights } from "@/lib/insights";
 
 const published = [
   {
+    slug: "why-people-volunteer-for-the-board",
+    date: "2026-10-05",
+    title: "Why people volunteer for the board",
+    linkedInUrl: undefined,
+  },
+  {
     slug: "aesthetics-in-the-plan",
     date: "2026-10-01",
     title: "How to keep aesthetics in the plan without letting them steal the plan",

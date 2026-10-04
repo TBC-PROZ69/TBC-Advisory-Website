@@ -75,6 +75,7 @@ describe("sitemap and robots", () => {
     const entries = sitemap();
     const urls = entries.map((entry) => entry.url);
     const insightPaths = [
+      "/insights/why-people-volunteer-for-the-board",
       "/insights/aesthetics-in-the-plan",
       "/insights/community-communication-practices",
       "/insights/reserves-into-planned-work",
@@ -100,7 +101,7 @@ describe("sitemap and robots", () => {
         continue;
       }
       if (path === "/insights") {
-        expect(entry.lastModified).toEqual(new Date("2026-10-01T00:00:00.000Z"));
+        expect(entry.lastModified).toEqual(new Date("2026-10-05T00:00:00.000Z"));
         continue;
       }
       expect(entry.lastModified).toEqual(new Date(SITE_LASTMOD));
