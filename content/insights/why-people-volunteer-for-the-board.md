@@ -31,8 +31,4 @@ Serving is unpaid. The accountability isn’t. Knowing why people volunteered is
 
 If you’re on a board — or thinking about it — what’s the real reason you said yes?
 
-## Where we fit
-
-TBC Advisory partners with HOA and COA boards as an independent advisor — not a management company. We help officers name what each director is there to protect so the unpaid work stays pointed at owners, not at whoever talks loudest.
-
 Straight conversation: [tbcadvisory.com/contact](https://www.tbcadvisory.com/contact)
