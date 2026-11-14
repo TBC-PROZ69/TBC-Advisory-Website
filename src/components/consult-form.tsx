@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useInquiryProtection } from "@/components/inquiry-protection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +36,7 @@ export function ConsultForm({
   initialStatus?: "idle" | "success" | "error";
 }) {
   const [fields, setFields] = useState<Fields>(empty);
-  const [hpTrap, setHpTrap] = useState("");
+  const protection = useInquiryProtection();
   const [errors, setErrors] = useState<Partial<Fields>>({});
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">(
     initialStatus === "success"
@@ -76,19 +77,27 @@ export function ConsultForm({
       return;
     }
 
+    const guarded = protection.payload(event.currentTarget);
+    if (!guarded.ok) {
+      setStatus("error");
+      setSubmitError(guarded.error);
+      return;
+    }
+
     setStatus("sending");
     setSubmitError("");
     try {
       await submitSiteForm("/api/consult", {
         ...fields,
-        hp_trap: hpTrap,
+        ...guarded.fields,
       });
       stripInquiryQuery();
+      protection.onAccepted();
       setStatus("success");
       setFields(empty);
-      setHpTrap("");
     } catch (error) {
       stripInquiryQuery();
+      protection.onRejected();
       setStatus("error");
       setSubmitError(
         error instanceof Error && error.message ? error.message : SEND_ERROR,
@@ -137,15 +146,7 @@ export function ConsultForm({
           {submitError || SEND_ERROR}
         </p>
       ) : null}
-      <input
-        type="text"
-        name="hp_trap"
-        tabIndex={-1}
-        autoComplete="off"
-        hidden
-        value={hpTrap}
-        onChange={(event) => setHpTrap(event.target.value)}
-      />
+      {protection.honeypot}
       <Field
         id="name"
         label="Name"
@@ -199,6 +200,7 @@ export function ConsultForm({
         Submit on this page. We follow up from {site.email}. Nothing is stored
         on the site beyond sending that message.
       </p>
+      {protection.turnstile}
       <Button
         type="submit"
         disabled={status === "sending"}

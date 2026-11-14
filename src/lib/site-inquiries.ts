@@ -40,11 +40,15 @@ function readRecord(body: unknown): Record<string, unknown> {
   return body as Record<string, unknown>;
 }
 
+export function isHoneypotFilled(body: unknown) {
+  return Boolean(trimField(readRecord(body).hp_trap, FIELD_LIMITS.honeypot));
+}
+
 export function parseConsultInquiry(
   body: unknown,
 ): InquiryParseResult<ConsultFields> {
   const raw = readRecord(body);
-  if (trimField(raw.hp_trap, FIELD_LIMITS.honeypot)) {
+  if (isHoneypotFilled(body)) {
     return { ok: true, honeypot: true };
   }
 
@@ -75,7 +79,7 @@ export function parsePrintQuoteInquiry(
   body: unknown,
 ): InquiryParseResult<PrintQuoteFields> {
   const raw = readRecord(body);
-  if (trimField(raw.hp_trap, FIELD_LIMITS.honeypot)) {
+  if (isHoneypotFilled(body)) {
     return { ok: true, honeypot: true };
   }
 

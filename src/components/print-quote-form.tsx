@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useInquiryProtection } from "@/components/inquiry-protection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,7 +38,7 @@ export function PrintQuoteForm({
   initialStatus?: "idle" | "success" | "error";
 }) {
   const [fields, setFields] = useState<Fields>(empty);
-  const [hpTrap, setHpTrap] = useState("");
+  const protection = useInquiryProtection();
   const [errors, setErrors] = useState<Partial<Fields>>({});
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">(
     initialStatus === "success"
@@ -79,19 +80,27 @@ export function PrintQuoteForm({
       return;
     }
 
+    const guarded = protection.payload(event.currentTarget);
+    if (!guarded.ok) {
+      setStatus("error");
+      setSubmitError(guarded.error);
+      return;
+    }
+
     setStatus("sending");
     setSubmitError("");
     try {
       await submitSiteForm("/api/print-quote", {
         ...fields,
-        hp_trap: hpTrap,
+        ...guarded.fields,
       });
       stripInquiryQuery();
+      protection.onAccepted();
       setStatus("success");
       setFields(empty);
-      setHpTrap("");
     } catch (error) {
       stripInquiryQuery();
+      protection.onRejected();
       setStatus("error");
       setSubmitError(
         error instanceof Error && error.message ? error.message : SEND_ERROR,
@@ -141,15 +150,7 @@ export function PrintQuoteForm({
           {submitError || SEND_ERROR}
         </p>
       ) : null}
-      <input
-        type="text"
-        name="hp_trap"
-        tabIndex={-1}
-        autoComplete="off"
-        hidden
-        value={hpTrap}
-        onChange={(event) => setHpTrap(event.target.value)}
-      />
+      {protection.honeypot}
       <Field
         id="print-name"
         name="name"
@@ -229,6 +230,7 @@ export function PrintQuoteForm({
         Submit on this page. Quotes are prepared from the details you send—we
         do not publish a price list.
       </p>
+      {protection.turnstile}
       <Button
         type="submit"
         disabled={status === "sending"}
