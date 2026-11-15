@@ -44,6 +44,21 @@ Set these on the Vercel project that hosts this site. Names must match exactly.
 
 Do not send from a personal mailbox. Do not change DNS or MX for this form—the public inbox remains `info@tbcadvisory.com`.
 
+## Bot protection (consultation and print quote)
+
+Both public forms keep an off-screen honeypot. A submission that fills it looks like a normal success and does not send a notification email. Submissions that arrive less than about three seconds after the form loads are rejected with an on-page message.
+
+Cloudflare Turnstile stays off until both variables below are set. If either one is missing, the server logs a warning, the widget is not required, and the forms keep working with the honeypot. Adding the variables does not require a code change. Redeploy after setting them so the public site key is included in the build. The secret is read on the server when a form is submitted.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No | Site key. Rendered in the browser. |
+| `TURNSTILE_SECRET_KEY` | No | Secret key. Verifies the token with Cloudflare before any notification email is sent. |
+
+Create a free widget in the [Cloudflare Turnstile dashboard](https://dash.cloudflare.com/?to=/:account/turnstile). Choose **Managed**. Add `www.tbcadvisory.com` (and any preview hostnames you want covered). Copy the site key and the secret key into the Vercel project’s environment variables.
+
+A token that fails verification is rejected with a short on-page error. Nothing is emailed.
+
 The hidden `/assess` tool uses the same `RESEND_API_KEY` / `RESEND_FROM` pair. Assess still records a submission if the key is missing; the public consult form does not.
 
 ## Design

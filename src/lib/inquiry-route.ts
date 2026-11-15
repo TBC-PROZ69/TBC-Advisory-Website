@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 
+import { isSubmitTooFast, startedAtFromBody, TOO_FAST_ERROR } from "@/lib/form-timing";
 import { sendSiteEmail } from "@/lib/mail";
 import { allowRequest, clientIp } from "@/lib/rate-limit";
 import {
   consultEmail,
+  isHoneypotFilled,
   parseConsultInquiry,
   parsePrintQuoteInquiry,
   printQuoteEmail,
   type ConsultFields,
   type PrintQuoteFields,
 } from "@/lib/site-inquiries";
+import { turnstileTokenFromBody, verifyTurnstileToken } from "@/lib/turnstile";
 
 const VISITOR_ERROR =
   "We could not send your request. Please try again in a moment.";
@@ -53,10 +56,6 @@ export async function handleSiteInquiry(
 ) {
   const redirectTo = kind === "consult" ? "/contact" : "/print";
 
-  if (!allowRequest(`inquiry:${kind}:${clientIp(request)}`)) {
-    return respond(request, redirectTo, 429, { error: VISITOR_ERROR });
-  }
-
   let body: unknown;
   try {
     body = await readBody(request);
@@ -64,6 +63,14 @@ export async function handleSiteInquiry(
     return respond(request, redirectTo, 400, {
       error: "That request could not be read.",
     });
+  }
+
+  if (isHoneypotFilled(body)) {
+    return respond(request, redirectTo, 200, { ok: true });
+  }
+
+  if (!allowRequest(`inquiry:${kind}:${clientIp(request)}`)) {
+    return respond(request, redirectTo, 429, { error: VISITOR_ERROR });
   }
 
   const parsed =
@@ -77,6 +84,18 @@ export async function handleSiteInquiry(
 
   if (parsed.honeypot) {
     return respond(request, redirectTo, 200, { ok: true });
+  }
+
+  if (isSubmitTooFast(startedAtFromBody(body))) {
+    return respond(request, redirectTo, 400, { error: TOO_FAST_ERROR });
+  }
+
+  const verdict = await verifyTurnstileToken(
+    turnstileTokenFromBody(body),
+    clientIp(request),
+  );
+  if (!verdict.ok) {
+    return respond(request, redirectTo, 400, { error: verdict.error });
   }
 
   const email =
