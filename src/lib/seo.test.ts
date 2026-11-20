@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
-import { site } from "@/lib/site";
+import { nav, site } from "@/lib/site";
 import {
   SITE_LASTMOD,
   assessMetadata,
+  buyersMetadata,
   canonicalUrl,
   notFoundMetadata,
   publicPageMetadata,
@@ -68,6 +69,15 @@ describe("public page metadata", () => {
     expect(meta.alternates?.canonical).toBeUndefined();
     expect(meta.openGraph?.url).toBeUndefined();
   });
+
+  it("keeps the Buyers Health Check noindex and out of the public nav", () => {
+    const meta = buyersMetadata("Buyers Health Check");
+    expect(meta.robots).toMatchObject({ index: false, follow: false });
+    expect(meta.alternates?.canonical).toBeUndefined();
+    expect(meta.openGraph?.url).toBeUndefined();
+    expect(publicRoutes.some((path) => path.includes("buyer"))).toBe(false);
+    expect(nav.some((item) => item.href.includes("buyer"))).toBe(false);
+  });
 });
 
 describe("sitemap and robots", () => {
@@ -90,6 +100,7 @@ describe("sitemap and robots", () => {
       ...insightPaths.map((path) => sitemapLoc(path)),
     ]);
     expect(urls.some((url) => url.includes("assess"))).toBe(false);
+    expect(urls.some((url) => url.includes("buyer"))).toBe(false);
     expect(urls.every((url) => !url.endsWith("/") || url === site.url)).toBe(
       true,
     );
@@ -117,7 +128,7 @@ describe("sitemap and robots", () => {
     const file = robots();
     expect(file.sitemap).toBe("https://www.tbcadvisory.com/sitemap.xml");
     expect(file.rules).toMatchObject({
-      disallow: ["/assess", "/assess/"],
+      disallow: ["/assess", "/assess/", "/buyers", "/buyers/", "/api/buyers"],
     });
   });
 });

@@ -117,6 +117,37 @@ export function notFoundMetadata(): Metadata {
   };
 }
 
+export function buyersMetadata(title: string): Metadata {
+  const description =
+    "Unlisted Buyers Health Check. This page is not offered for public indexing.";
+  return {
+    title,
+    description,
+    robots: {
+      index: false,
+      follow: false,
+      nocache: true,
+      googleBot: {
+        index: false,
+        follow: false,
+        noimageindex: true,
+      },
+    },
+    openGraph: {
+      title: `${title} | ${site.name}`,
+      description,
+      siteName: site.name,
+      type: "website",
+      locale: "en_US",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${title} | ${site.name}`,
+      description,
+    },
+  };
+}
+
 export function assessMetadata(): Metadata {
   return {
     title: "Association assessment",
