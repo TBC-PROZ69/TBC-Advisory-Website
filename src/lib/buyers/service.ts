@@ -604,14 +604,39 @@ export async function commitBuyerReport(input: {
       for (const file of stored) {
         const bytes = (await readPrivateBytes(file.storageKey)) ?? new Uint8Array();
         let doc = await extractDocument(file.fileName, bytes);
-        if (doc.unread?.includes("scanned without text") && ocrBudget > 0 && bytes.byteLength > 0) {
-          const ocr = await ocrScannedPdf(
-            file.fileName,
-            bytes,
-            Math.min(OCR_PAGES_PER_FILE, ocrBudget),
-          );
-          doc = ocr.doc;
-          ocrBudget -= ocr.pagesSent;
+        if (bytes.byteLength > 0 && ocrBudget > 0) {
+          const blankPages = doc.pages
+            .map((page) => {
+              const match = /^page (\d+)$/.exec(page.label);
+              return match && page.text.trim().length === 0 ? Number(match[1]) : 0;
+            })
+            .filter((page) => page > 0);
+          if (doc.unread?.includes("scanned without text") || blankPages.length > 0) {
+            const ocr = await ocrScannedPdf(
+              file.fileName,
+              bytes,
+              Math.min(OCR_PAGES_PER_FILE, ocrBudget),
+              blankPages.length > 0 ? blankPages : undefined,
+            );
+            ocrBudget -= ocr.pagesSent;
+            if (blankPages.length > 0) {
+              doc = {
+                fileName: doc.fileName,
+                pages: doc.pages
+                  .map((page) => {
+                    const match = /^page (\d+)$/.exec(page.label);
+                    const transcribed = match
+                      ? ocr.doc.pages.find((item) => item.label === `OCR page ${match[1]}`)?.text
+                      : "";
+                    return transcribed ? { label: page.label, text: transcribed } : page;
+                  })
+                  .filter((page) => page.text.trim().length > 0),
+                unread: ocr.doc.unread,
+              };
+            } else {
+              doc = ocr.doc;
+            }
+          }
         }
         extracted.push(doc);
       }

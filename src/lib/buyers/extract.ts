@@ -58,19 +58,23 @@ async function extractPdf(fileName: string, bytes: Uint8Array): Promise<Extracte
     label: `page ${index + 1}`,
     text: clip(text ?? ""),
   }));
-  const readable = pages.filter((page) => page.text.length > 0);
-  if (readable.length === 0) {
+  if (!pages.some((page) => page.text.length > 0)) {
     return {
       fileName,
       pages: [],
       unread: `${fileName} is scanned without text, could not be read.`,
     };
   }
-  return { fileName, pages: readable, unread: null };
+  return { fileName, pages, unread: null };
 }
 
 /** Reads a scan that has no text layer. Page images are not stored. */
-export async function ocrScannedPdf(fileName: string, bytes: Uint8Array, pageBudget: number) {
+export async function ocrScannedPdf(
+  fileName: string,
+  bytes: Uint8Array,
+  pageBudget: number,
+  onlyPages?: number[],
+) {
   const cap = Math.max(0, Math.min(OCR_PAGES_PER_FILE, pageBudget));
   if (cap === 0) {
     return {
@@ -84,13 +88,20 @@ export async function ocrScannedPdf(fileName: string, bytes: Uint8Array, pageBud
   }
   const pages: ExtractedPage[] = [];
   let total = cap;
-  try {
-    const probe = await extractText(bytes, { mergePages: false });
-    total = Math.min(cap, probe.totalPages || cap);
-  } catch {
-    total = cap;
+  let pageNumbers: number[] = [];
+  if (onlyPages && onlyPages.length > 0) {
+    pageNumbers = onlyPages.filter((page) => page > 0).slice(0, cap);
+    total = pageNumbers.length;
+  } else {
+    try {
+      const probe = await extractText(bytes, { mergePages: false });
+      total = Math.min(cap, probe.totalPages || cap);
+    } catch {
+      total = cap;
+    }
+    pageNumbers = Array.from({ length: total }, (_, index) => index + 1);
   }
-  for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
+  for (const pageNumber of pageNumbers) {
     let image: ArrayBuffer;
     try {
       image = await renderPageAsImage(bytes, pageNumber, { scale: 1.25 });
@@ -137,13 +148,15 @@ export async function ocrScannedPdf(fileName: string, bytes: Uint8Array, pageBud
     }
   }
   let unread: string | null = null;
-  try {
-    const probe = await extractText(bytes, { mergePages: false });
-    if ((probe.totalPages || 0) > total) {
-      unread = `${fileName}: only the first ${total} scanned pages were read by OCR. Later pages were not sent.`;
+  if (!onlyPages?.length) {
+    try {
+      const probe = await extractText(bytes, { mergePages: false });
+      if ((probe.totalPages || 0) > total) {
+        unread = `${fileName}: only the first ${total} scanned pages were read by OCR. Later pages were not sent.`;
+      }
+    } catch {
+      unread = null;
     }
-  } catch {
-    unread = null;
   }
   if (pages.length === 0) {
     unread = `${fileName} is scanned without text, and OCR returned no words.`;
