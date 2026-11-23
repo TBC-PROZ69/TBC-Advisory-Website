@@ -14,7 +14,7 @@ Do not put keys in chat, email, or the repository.
 
 1. Open the preview, then add `/buyers/admin` to the address.
 2. If `BUYERS_ADMIN_KEY` is not set, that hidden page opens and says so. It is not production.
-3. Create a one-time link. The full address is copied. Open it, use **Fill sample data** (preview and local only), walk through questions, then the document step, then the report.
+3. Create a one-time link. The full address is copied. Open it, use **Fill sample data** (preview and local only), then complete the document checklist. There is no long questionnaire.
 4. Reload the one-time link in the same browser. It is spent.
 5. Create an agent link with a fake name, a fake email, and a fake Florida license. The agent name is printed on the report. Deactivate it from the list and open the link again.
 
@@ -29,29 +29,36 @@ Sample data on the button is fictional (`Palm Sample Condominium`, `sample.buyer
 
 Billing mode is `manual`. Stripe customer, subscription, and checkout ids are stored as empty fields so a later checkout can fill them after payment. The admin API rejects any attempt to mark a link as paid by the browser. Do not add Stripe until you are ready to take payment.
 
+## Buyer flow
+
+1. Short intro: association name, optional unit address, state (Florida by default), buyer or agent name and email, and whether any residential building has 3 or more stories.
+2. A document checklist. Each row is Attach file or "I don't have this." A short note is available, collapsed. The report can be prepared only when every visible row is addressed.
+3. Results list each missing document as a finding and as an item to request before closing. Attached files get short guidance. The files themselves are not read.
+
+SIRS and the milestone inspection appear only when the building may have 3 or more stories. Marking "No" on that question leaves those rows out, so a one-story community is not told a missing SIRS is a risk.
+
 ## Documents
 
-Each slot offers Upload, Not available, or Skip. The buyer confirms a consent line before any upload.
+Each row is Attach file or "I don't have this." The buyer confirms a consent line before any upload. More than one file is allowed on a row.
 
-Allowed types: PDF, JPEG, PNG, WEBP, GIF, DOCX, XLSX. Checked on the server by extension, MIME, and file signature. 4 MB per file (under the platform request limit). 32 MB and 24 files for the whole packet. ZIP is rejected. Minutes allow 12 files so a year of meetings can be separate PDFs. Governing documents allow 4. Insurance declaration pages allow 4.
+Allowed types: PDF, JPEG, PNG, WEBP, GIF, DOCX, and XLSX. XLSX stays because budgets and actuals often arrive as spreadsheets. Checked on the server by extension, MIME, and file signature. 4 MB per file. 32 MB and 40 files for the whole packet. ZIP is rejected. Minutes allow 12 files.
 
-Slots:
+Order:
 
-- Governing documents (declaration, bylaws, rules)
-- Current budget
-- Reserve study
-- SIRS, only when a condominium SIRS may apply
-- Milestone inspection report, only when a milestone inspection may be due or the age is unknown
-- Board minutes, last 12 months
-- Insurance declaration pages
-- Special assessment history and notices
-- Estoppel certificate
-- Year-end financial report
-- Most recent interim financial statement (added because the year-end report is often old by closing)
-- Pending litigation summary (a summary or the estoppel section, not a full court file)
-- Resale disclosure or question-and-answer sheet
+- Latest approved budget
+- Latest actuals vs budget
+- Latest reserve study
+- SIRS, only if a building may have 3 or more stories
+- Milestone inspection report, same condition
+- Governing documents (declaration, bylaws, rules and regulations)
+- Most recent annual or year-end financial report or audit
+- Recent board meeting minutes (last 6 to 12 months)
+- Insurance declaration pages, including wind and flood
+- Special assessment history or notices
+- Estoppel certificate or questionnaire
+- Pending litigation disclosure
 
-The report lists Received, Not available, or Skipped. It does not quote file contents. Bytes are deleted when the report is produced. A sweep on later visits deletes anything still stored after 30 days. Private Blob uploads also set a 30-day lifetime.
+The report does not quote file contents. Bytes are deleted when the report is produced. A sweep on later visits deletes anything still stored after 30 days. Private Blob uploads also set a 30-day lifetime.
 
 Files are never given a public URL. There is no download route.
 
@@ -59,7 +66,7 @@ Files are never given a public URL. There is no download route.
 
 | Piece | Preview with no new env vars | After you connect private storage |
 | --- | --- | --- |
-| Question flow, scoring, on-screen report, print | Real | Real |
+| Checklist, findings, on-screen report, print | Real | Real |
 | One-time and agent links | Real, signed with a temporary key that is in the source and is not a production secret | Real, signed with `BUYERS_LINK_SECRET` |
 | One-time "already used" in the same browser | Real (httpOnly cookie), even if the server instance changes | Real, plus the ledger |
 | Revoke, monthly cap, and saved reports across instances | Best effort on that instance's temporary disk only | Real, in the private Blob ledger |

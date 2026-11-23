@@ -9,7 +9,7 @@ import {
 } from "@/lib/buyers/access";
 import { sendBuyerReport } from "@/lib/buyers/email";
 import { BuyersError } from "@/lib/buyers/errors";
-import { parseAnswerPayload, parseChoices, parseCompletedIntake } from "@/lib/buyers/payload";
+import { parseChoices, parseCompletedIntake, parseNotes } from "@/lib/buyers/payload";
 import {
   commitBuyerReport,
   latestReport,
@@ -83,21 +83,14 @@ export async function POST(request: NextRequest) {
         401,
       );
     }
-    const intake = parseCompletedIntake(body.intake, {
-      kind: session.kind,
-      agentName: session.agentName,
-      agentEmail: session.agentEmail,
-      agentLicense: session.agentLicense,
-    });
-    const parsed = parseAnswerPayload(intake, body.answers, body.notes);
+    const intake = parseCompletedIntake(body.intake);
     const choices = parseChoices(body.choices);
+    const notes = parseNotes(body.notes);
     const consent = body.consent === true;
     const { report, kind } = await commitBuyerReport({
       payload: session.payload,
       intake,
-      questions: parsed.questions,
-      answers: parsed.answers,
-      notes: parsed.notes,
+      notes,
       choices,
       consent,
       spentIds: spentIdsFromCookie(cookie),

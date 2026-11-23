@@ -27,8 +27,7 @@ import {
   writeLedger,
 } from "@/lib/buyers/store";
 import { newId, signToken, signingConfigured, type TokenPayload } from "@/lib/buyers/token";
-import type { BuyerIntake, BuyerQuestion, SlotChoice } from "@/lib/buyers/types";
-import type { AnswerMap } from "@/lib/buyers/scoring";
+import type { BuyerIntake, SlotChoice } from "@/lib/buyers/types";
 
 const FILE_TTL_MS = FILE_TTL_DAYS * 24 * 60 * 60 * 1000;
 
@@ -436,8 +435,6 @@ export async function sweepStoredFiles(now = new Date()) {
 export async function commitBuyerReport(input: {
   payload: TokenPayload;
   intake: BuyerIntake;
-  questions: BuyerQuestion[];
-  answers: AnswerMap;
   notes: Record<string, string>;
   choices: Record<string, SlotChoice | "">;
   consent: boolean;
@@ -490,8 +487,6 @@ export async function commitBuyerReport(input: {
       id: newId(),
       createdAt: now.toISOString(),
       intake: input.intake,
-      questions: input.questions,
-      answers: input.answers,
       notes: input.notes,
       files: publicFiles(files),
       choices: input.choices,

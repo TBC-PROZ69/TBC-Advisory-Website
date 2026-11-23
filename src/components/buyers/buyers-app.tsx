@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
+import { ChecklistStep } from "@/components/buyers/checklist-step";
 import { IntakeForm } from "@/components/buyers/intake-form";
-import { QuestionStep } from "@/components/buyers/question-step";
 import { ReportView } from "@/components/buyers/report-view";
-import { sampleAnswers, sampleIntake } from "@/components/buyers/sample";
+import { sampleIntake } from "@/components/buyers/sample";
 import {
   clearDraft,
   clearStoredResult,
@@ -19,14 +19,11 @@ import {
   subscribeBuyers,
   type BuyerDraft,
 } from "@/components/buyers/storage";
-import { UploadStep } from "@/components/buyers/upload-step";
 import { Container } from "@/components/container";
-import { factsFromIntake } from "@/lib/buyers/applicability";
-import { applicableQuestions } from "@/lib/buyers/applicability";
 import { applicableSlots } from "@/lib/buyers/documents";
-import { intakeIssues, toIntake, type LinkContext } from "@/lib/buyers/intake";
+import { intakeIssues, toIntake } from "@/lib/buyers/intake";
 import type { BuyerReport } from "@/lib/buyers/report";
-import { BUYER_AREAS, type BuyerSessionView } from "@/lib/buyers/types";
+import type { BuyerSessionView } from "@/lib/buyers/types";
 import { site } from "@/lib/site";
 
 export function BuyersApp({
@@ -51,16 +48,6 @@ export function BuyersApp({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const link = useMemo<LinkContext>(
-    () => ({
-      kind: session.kind,
-      agentName: session.agentName,
-      agentEmail: session.agentEmail,
-      agentLicense: session.agentLicense,
-    }),
-    [session.kind, session.agentName, session.agentEmail, session.agentLicense],
-  );
-
   useEffect(() => {
     if (!stored?.report.id) return;
     document.getElementById("buyers-step")?.scrollIntoView({ block: "start" });
@@ -72,10 +59,7 @@ export function BuyersApp({
     void (async () => {
       const response = await fetch(`/api/buyers/report?t=${encodeURIComponent(token)}`);
       if (!response.ok || cancelled) return;
-      const data = (await response.json()) as {
-        report?: BuyerReport;
-        emailed?: boolean;
-      };
+      const data = (await response.json()) as { report?: BuyerReport; emailed?: boolean };
       if (!data.report || cancelled) return;
       saveStoredResult(session.grantId, {
         report: data.report,
@@ -92,31 +76,21 @@ export function BuyersApp({
     saveDraft(session.grantId, recipe(loadDraft(session.grantId)));
   }
 
-  const facts = useMemo(() => {
-    if (Object.keys(intakeIssues(draft.intake, link)).length > 0) return null;
-    return factsFromIntake(toIntake(draft.intake, link));
-  }, [draft.intake, link]);
-
-  const questions = useMemo(
-    () => (facts ? applicableQuestions(facts) : []),
-    [facts],
-  );
-  const areas = BUYER_AREAS.filter((area) =>
-    questions.some((question) => question.area === area),
-  );
-  const slots = facts ? applicableSlots(facts) : [];
-  const answered = questions.filter((question) => draft.answers[question.id]).length;
+  const slots = useMemo(() => {
+    if (Object.keys(intakeIssues(draft.intake)).length > 0) return [];
+    const intake = toIntake(draft.intake);
+    return applicableSlots({ stories3: intake.stories3, state: intake.state });
+  }, [draft.intake]);
 
   async function submitReport() {
     setBusy(true);
     setError("");
     try {
-      const choices: Record<string, "uploaded" | "not-available" | "skipped"> = {};
+      const choices: Record<string, "uploaded" | "not-available"> = {};
       for (const slot of slots) {
         if ((draft.files[slot.id] ?? []).length > 0) choices[slot.id] = "uploaded";
-        else if (draft.choices[slot.id] === "not-available") {
-          choices[slot.id] = "not-available";
-        } else choices[slot.id] = "skipped";
+        else if (draft.missing[slot.id]) choices[slot.id] = "not-available";
+        else throw new Error("Every row needs a file or a mark that you do not have it.");
       }
       const response = await fetch("/api/buyers/report", {
         method: "POST",
@@ -124,7 +98,6 @@ export function BuyersApp({
         body: JSON.stringify({
           t: token,
           intake: draft.intake,
-          answers: draft.answers,
           notes: draft.notes,
           choices,
           consent: draft.consent,
@@ -147,9 +120,7 @@ export function BuyersApp({
       update((current) => ({ ...current, step: "results" }));
     } catch (submitError) {
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "The report could not be prepared.",
+        submitError instanceof Error ? submitError.message : "The report could not be prepared.",
       );
     } finally {
       setBusy(false);
@@ -163,10 +134,9 @@ export function BuyersApp({
       <Container className="max-w-2xl py-16">
         <h1 className="font-heading text-4xl text-navy">This link has been used</h1>
         <p className="mt-4 text-base leading-relaxed text-navy/75">
-          This one-time link already produced a report. If you created it in
-          this browser, it will appear here when it is still saved. Otherwise
-          contact {site.email} and quote the property. A new property needs a
-          new link.
+          This one-time link already produced a report. If you created it in this
+          browser, it will appear here when it is still saved. Otherwise contact{" "}
+          {site.email}. A new property needs a new link.
         </p>
       </Container>
     );
@@ -176,183 +146,119 @@ export function BuyersApp({
     <div className="bg-background">
       <Container className="max-w-3xl py-10 sm:py-14">
         <div id="buyers-step">
-        {report && (draft.step === "results" || session.status === "spent") ? (
-          <ReportView
-            report={report}
-            emailed={stored?.emailed ?? null}
-            linkStatus={stored?.linkStatus ?? null}
-            onAnother={
-              session.kind === "agent" && stored?.linkStatus !== "spent"
-                ? () => {
-                    clearDraft(session.grantId);
-                    clearStoredResult(session.grantId);
-                    saveDraft(session.grantId, emptyDraft());
-                  }
-                : undefined
-            }
-          />
-        ) : (
-          <>
-            <p className="text-[0.7rem] font-medium tracking-[0.18em] text-brass uppercase">
-              Buyer screening
-            </p>
-            <h1 className="font-heading mt-3 text-3xl tracking-tight text-navy sm:text-4xl">
-              Buyers Health Check
-            </h1>
-            <p className="mt-4 text-base leading-relaxed text-navy/75">
-              A private screening for someone buying a Florida condominium or
-              homeowners association property, or for their real estate agent.
-              Chapter 719 cooperatives are out of scope.
-            </p>
-            <p className="mt-4 rounded-md border border-primary/30 bg-card p-4 text-sm leading-relaxed text-navy/75">
-              This is not legal, financial, engineering, or inspection advice.
-              TBC Advisory is not a property management company. The report is
-              a reading of the answers you give, plus a list of documents you
-              attach. It does not replace an estoppel, a title search, an
-              inspection, or a Florida real estate attorney.
-            </p>
-            {session.overCap ? (
-              <p className="mt-4 rounded-md border border-[#9a3412]/30 bg-[#fff1e6] p-4 text-sm text-[#9a3412]">
-                This subscription has reached its courtesy volume of{" "}
-                {session.monthlyCap} reports this month. You can still finish
-                this report. TBC may follow up.
+          {report && (draft.step === "results" || session.status === "spent") ? (
+            <ReportView
+              report={report}
+              emailed={stored?.emailed ?? null}
+              linkStatus={stored?.linkStatus ?? null}
+              onAnother={
+                session.kind === "agent" && stored?.linkStatus !== "spent"
+                  ? () => {
+                      clearDraft(session.grantId);
+                      clearStoredResult(session.grantId);
+                      saveDraft(session.grantId, emptyDraft());
+                    }
+                  : undefined
+              }
+            />
+          ) : (
+            <>
+              <p className="text-[0.7rem] font-medium tracking-[0.18em] text-brass uppercase">
+                Buyer screening
               </p>
-            ) : null}
-            {draft.step !== "intake" && questions.length > 0 ? (
-              <div className="mt-8">
-                <div className="flex items-center justify-between text-xs tracking-wide text-navy/60 uppercase">
-                  <span>
-                    {draft.step === "upload"
-                      ? "Documents"
-                      : draft.step === "questions"
-                        ? "Questions"
-                        : "Report"}
-                  </span>
-                  <span>
-                    {answered} of {questions.length} answered
-                  </span>
-                </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-navy/10">
-                  <div
-                    className="h-full bg-primary"
-                    style={{
-                      width: `${questions.length ? Math.round((answered / questions.length) * 100) : 0}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ) : null}
+              <h1 className="font-heading mt-3 text-3xl tracking-tight text-navy sm:text-4xl">
+                Buyers Health Check
+              </h1>
+              <p className="mt-4 text-base leading-relaxed text-navy/75">
+                A short checklist and guidance for a Florida condominium or
+                homeowners association purchase. You do not need to know how the
+                association is run. Mark what you have, and what you do not.
+              </p>
+              <p className="mt-4 rounded-md border border-primary/30 bg-card p-4 text-sm leading-relaxed text-navy/75">
+                This is not legal, financial, engineering, or inspection advice.
+                TBC Advisory is not a property management company. The report
+                records which documents you attached and which you do not have.
+                It does not read the files.
+              </p>
+              {session.kind === "agent" ? (
+                <p className="mt-4 rounded-md border border-navy/10 bg-card p-4 text-sm text-navy/80">
+                  This report will name {session.agentName}
+                  {session.agentLicense ? `, Florida license ${session.agentLicense}` : ""}.
+                </p>
+              ) : null}
+              {session.overCap ? (
+                <p className="mt-4 rounded-md border border-[#9a3412]/30 bg-[#fff1e6] p-4 text-sm text-[#9a3412]">
+                  This subscription has reached its courtesy volume of {session.monthlyCap}{" "}
+                  reports this month. You can still finish this report. TBC may follow up.
+                </p>
+              ) : null}
 
-            {draft.step === "intake" ? (
-              <IntakeForm
-                value={draft.intake}
-                link={link}
-                onChange={(intake) => update((current) => ({ ...current, intake }))}
-                onContinue={() =>
-                  update((current) => ({ ...current, step: "questions", areaIndex: 0 }))
-                }
-                onSample={
-                  allowSample
-                    ? () =>
-                        update((current) => ({
-                          ...current,
-                          intake: sampleIntake,
-                          answers: sampleAnswers(),
-                        }))
-                    : undefined
-                }
-              />
-            ) : null}
-
-            {draft.step === "questions" && facts ? (
-              <QuestionStep
-                areas={areas}
-                areaIndex={Math.min(draft.areaIndex, Math.max(areas.length - 1, 0))}
-                questions={questions}
-                answers={draft.answers}
-                notes={draft.notes}
-                onAnswer={(id, answer) =>
-                  update((current) => ({
-                    ...current,
-                    answers: { ...current.answers, [id]: answer },
-                  }))
-                }
-                onNote={(id, note) =>
-                  update((current) => ({
-                    ...current,
-                    notes: { ...current.notes, [id]: note },
-                  }))
-                }
-                onBack={() =>
-                  update((current) =>
-                    current.areaIndex <= 0
-                      ? { ...current, step: "intake" }
-                      : { ...current, areaIndex: current.areaIndex - 1 },
-                  )
-                }
-                onNext={() =>
-                  update((current) =>
-                    current.areaIndex >= areas.length - 1
-                      ? { ...current, step: "upload" }
-                      : { ...current, areaIndex: current.areaIndex + 1 },
-                  )
-                }
-              />
-            ) : null}
-
-            {draft.step === "upload" && facts ? (
-              <>
-                <UploadStep
-                  token={token}
-                  slots={slots}
-                  consent={draft.consent}
-                  choices={draft.choices}
-                  files={draft.files}
-                  busy={busy}
-                  onConsent={(consent) => update((current) => ({ ...current, consent }))}
-                  onChoice={(slot, choice) =>
-                    update((current) => ({
-                      ...current,
-                      choices: { ...current.choices, [slot]: choice },
-                    }))
+              {draft.step === "intake" ? (
+                <IntakeForm
+                  value={draft.intake}
+                  onChange={(intake) => update((current) => ({ ...current, intake }))}
+                  onContinue={() => update((current) => ({ ...current, step: "checklist" }))}
+                  onSample={
+                    allowSample
+                      ? () => update((current) => ({ ...current, intake: sampleIntake }))
+                      : undefined
                   }
-                  onFileAdded={(slot, file) =>
-                    update((current) => ({
-                      ...current,
-                      files: {
-                        ...current.files,
-                        [slot]: [...(current.files[slot] ?? []), file],
-                      },
-                    }))
-                  }
-                  onFileRemoved={(slot, fileId) =>
-                    update((current) => ({
-                      ...current,
-                      files: {
-                        ...current.files,
-                        [slot]: (current.files[slot] ?? []).filter(
-                          (file) => file.id !== fileId,
-                        ),
-                      },
-                    }))
-                  }
-                  onBack={() =>
-                    update((current) => ({
-                      ...current,
-                      step: "questions",
-                      areaIndex: Math.max(areas.length - 1, 0),
-                    }))
-                  }
-                  onContinue={() => void submitReport()}
                 />
-                {error ? (
-                  <p role="alert" className="mt-4 text-sm text-destructive">
-                    {error}
-                  </p>
-                ) : null}
-              </>
-            ) : null}
-          </>
+              ) : null}
+
+              {draft.step === "checklist" ? (
+                <>
+                  <ChecklistStep
+                    token={token}
+                    slots={slots}
+                    consent={draft.consent}
+                    missing={draft.missing}
+                    notes={draft.notes}
+                    files={draft.files}
+                    busy={busy}
+                    onConsent={(consent) => update((current) => ({ ...current, consent }))}
+                    onMissing={(slot, value) =>
+                      update((current) => ({
+                        ...current,
+                        missing: { ...current.missing, [slot]: value },
+                      }))
+                    }
+                    onNote={(slot, note) =>
+                      update((current) => ({
+                        ...current,
+                        notes: { ...current.notes, [slot]: note },
+                      }))
+                    }
+                    onFileAdded={(slot, file) =>
+                      update((current) => ({
+                        ...current,
+                        files: {
+                          ...current.files,
+                          [slot]: [...(current.files[slot] ?? []), file],
+                        },
+                        missing: { ...current.missing, [slot]: false },
+                      }))
+                    }
+                    onFileRemoved={(slot, fileId) =>
+                      update((current) => ({
+                        ...current,
+                        files: {
+                          ...current.files,
+                          [slot]: (current.files[slot] ?? []).filter((file) => file.id !== fileId),
+                        },
+                      }))
+                    }
+                    onBack={() => update((current) => ({ ...current, step: "intake" }))}
+                    onSubmit={() => void submitReport()}
+                  />
+                  {error ? (
+                    <p role="alert" className="mt-4 text-sm text-destructive">
+                      {error}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+    </>
         )}
         </div>
       </Container>

@@ -1,8 +1,8 @@
-import { milestoneApplies, sirsApplies } from "@/lib/buyers/applicability";
+import { structuralRowsApply } from "@/lib/buyers/applicability";
 import { MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES } from "@/lib/buyers/constants";
 import type { BuyerFacts, DocumentStatus, SlotChoice } from "@/lib/buyers/types";
 
-export type SlotWhen = "always" | "sirs" | "milestone";
+export type SlotWhen = "always" | "structural";
 
 export type DocumentSlot = {
   id: string;
@@ -10,111 +10,178 @@ export type DocumentSlot = {
   detail: string;
   maxFiles: number;
   when: SlotWhen;
+  signal: "high" | "standard";
+  missing: string;
+  request: string;
+  attached: string;
 };
 
-/**
- * Interim financials are included because a year-end report is often many
- * months old by closing. Governing documents, minutes, and insurance allow
- * more than one file because they usually arrive as separate PDFs, and each
- * upload is capped at 4 MB. ZIP files are not accepted.
- */
+/** Buyer-obtainable records, in the order a closing packet is usually gathered. */
 export const DOCUMENT_SLOTS: DocumentSlot[] = [
   {
-    id: "governing",
-    title: "Governing documents",
-    detail:
-      "Declaration, bylaws, and rules. Separate PDFs are fine. Up to 4 files.",
-    maxFiles: 4,
+    id: "budget",
+    title: "Latest approved budget",
+    detail: "The budget the board adopted for the current year.",
+    maxFiles: 8,
     when: "always",
+    signal: "high",
+    missing:
+      "No latest approved budget was provided. Ask the seller or the association for it before closing. Without the budget, the dues you were quoted are just a number.",
+    request: "Ask for the latest approved budget.",
+    attached:
+      "The latest approved budget was attached. This check does not read the file. Look for insurance, reserves, and any one-time money holding the dues down.",
   },
   {
-    id: "budget",
-    title: "Current budget",
-    detail: "The adopted budget for the current year.",
-    maxFiles: 2,
+    id: "actuals",
+    title: "Latest actuals vs budget",
+    detail:
+      "The most recent financial statement: balance sheet and income statement, next to the budget if you have both.",
+    maxFiles: 8,
     when: "always",
+    signal: "high",
+    missing:
+      "No recent actuals were provided. Ask for the latest balance sheet and income statement before closing. A budget without actuals does not show whether the association is collecting and spending as planned.",
+    request: "Ask for the latest balance sheet and income statement.",
+    attached:
+      "Recent actuals were attached. This check does not read the file. Compare income and spending with the budget, and note cash and reserve balances.",
   },
   {
     id: "reserves",
-    title: "Reserve study",
-    detail: "The reserve study or the reserve schedule, if one exists.",
-    maxFiles: 2,
+    title: "Latest reserve study",
+    detail: "The study or schedule that says what the reserves are supposed to cover.",
+    maxFiles: 8,
     when: "always",
+    signal: "high",
+    missing:
+      "No reserve study was provided. Ask the seller or the association for it before closing. A missing reserve study is a risk signal: you cannot see whether reserves match the work still ahead.",
+    request: "Ask for the latest reserve study.",
+    attached:
+      "A reserve study was attached. This check does not read the file. Compare the recommended balance with the cash the association actually holds.",
   },
   {
     id: "sirs",
-    title: "Structural Integrity Reserve Study (SIRS)",
-    detail: "Shown for condominiums that may need a SIRS. Skip it if you were told it does not apply.",
-    maxFiles: 2,
-    when: "sirs",
+    title: "SIRS (Structural Integrity Reserve Study)",
+    detail:
+      "Shown because a residential building may have 3 or more stories. Florida condominiums in that group generally must have a SIRS.",
+    maxFiles: 8,
+    when: "structural",
+    signal: "high",
+    missing:
+      "No SIRS was provided. Ask whether this building requires a Structural Integrity Reserve Study, and for the current study if it does. A missing SIRS, where one is required, is a risk signal for safety and for a future special assessment.",
+    request:
+      "Ask for the Structural Integrity Reserve Study, or a written answer that one is not required.",
+    attached:
+      "A SIRS was attached. This check does not read the file. Look for a near-term funding gap and any recommended special assessment.",
   },
   {
     id: "milestone",
     title: "Milestone inspection report",
     detail:
-      "Shown when a milestone inspection may be due or the building age is unknown. Phase 1 and phase 2 can be separate files.",
-    maxFiles: 2,
-    when: "milestone",
+      "Shown because a residential building may have 3 or more stories. For a condominium or cooperative building, a milestone inspection is generally due at 30 years, or at 25 years near the coast.",
+    maxFiles: 8,
+    when: "structural",
+    signal: "high",
+    missing:
+      "No milestone inspection report was provided. Ask whether an inspection is due for this building, and for the report if it is. A missing report, where an inspection was required, is a risk signal.",
+    request:
+      "Ask for the milestone inspection report, or a written answer that one is not due yet.",
+    attached:
+      "A milestone report was attached. This check does not read the file. Look for substantial deterioration and repairs that are not finished.",
+  },
+  {
+    id: "governing",
+    title: "Governing documents",
+    detail: "Declaration, bylaws, and rules and regulations. Separate files are fine.",
+    maxFiles: 8,
+    when: "always",
+    signal: "standard",
+    missing:
+      "Governing documents were not provided. Ask for the declaration, bylaws, and rules before closing. Those papers are where rental limits, use rules, and assessment powers usually sit.",
+    request: "Ask for the declaration, bylaws, and rules and regulations.",
+    attached:
+      "Governing documents were attached. This check does not read the file. Read the parts that match how you plan to use the property.",
+  },
+  {
+    id: "year-end",
+    title: "Most recent annual or year-end financial report",
+    detail: "The latest annual report, year-end financials, or audit.",
+    maxFiles: 8,
+    when: "always",
+    signal: "standard",
+    missing:
+      "No year-end financial report or audit was provided. Ask for the latest one. It is the longer record behind the monthly numbers.",
+    request: "Ask for the most recent annual or year-end financial report, or the audit.",
+    attached:
+      "A year-end report was attached. This check does not read the file. Note any comment on reserves, delinquencies, or litigation.",
   },
   {
     id: "minutes",
-    title: "Board minutes, last 12 months",
-    detail: "One file per meeting is fine. Up to 12 files.",
+    title: "Recent board meeting minutes",
+    detail: "Minutes for about the last 6 to 12 months. One file per meeting is fine.",
     maxFiles: 12,
     when: "always",
+    signal: "standard",
+    missing:
+      "Recent board minutes were not provided. Ask for the last 6 to 12 months. Minutes are where special assessments, insurance trouble, and repairs usually show up before a listing does.",
+    request: "Ask for board minutes for the last 6 to 12 months.",
+    attached:
+      "Board minutes were attached. This check does not read the file. Scan for special assessments, insurance, litigation, and unfinished repairs.",
   },
   {
     id: "insurance",
     title: "Insurance declaration pages",
     detail:
-      "Property, wind, flood, and liability if they are separate. Declaration pages are enough.",
-    maxFiles: 4,
+      "Master policy declaration pages, including wind and flood if those are separate.",
+    maxFiles: 8,
     when: "always",
+    signal: "high",
+    missing:
+      "Insurance declaration pages were not provided. Ask for them before closing. The deductible, especially wind or flood, can become an owner assessment after a storm.",
+    request:
+      "Ask for the current insurance declaration pages, including wind and flood if they are separate.",
+    attached:
+      "Insurance declaration pages were attached. This check does not read the file. Find the wind and flood deductibles and whether owners can be assessed for them.",
   },
   {
     id: "special-assessments",
-    title: "Special assessment history and notices",
-    detail: "Approved assessments and any notice of one that is only proposed.",
-    maxFiles: 4,
+    title: "Special assessment history or notices",
+    detail: "Notices or a history of special assessments, approved or only proposed.",
+    maxFiles: 8,
     when: "always",
+    signal: "high",
+    missing:
+      "No special assessment history or notices were provided. Ask the association, in writing, whether any special assessment is approved, unpaid, or under discussion, and who must pay it at closing.",
+    request: "Ask for special assessment history and any current notices.",
+    attached:
+      "Special assessment papers were attached. This check does not read the file. Confirm what is still unpaid for this unit and who pays it at closing.",
   },
   {
     id: "estoppel",
-    title: "Estoppel certificate",
-    detail: "The association estoppel for this unit, including the page that shows the expiration date.",
-    maxFiles: 2,
-    when: "always",
-  },
-  {
-    id: "year-end",
-    title: "Year-end financial report",
-    detail: "The latest year-end report or audit.",
-    maxFiles: 2,
-    when: "always",
-  },
-  {
-    id: "interim-financials",
-    title: "Most recent interim financial statement",
+    title: "Estoppel certificate or questionnaire",
     detail:
-      "The latest monthly or quarterly financials. Added because the year-end report is often old by the time a buyer closes.",
-    maxFiles: 2,
+      "The estoppel or association questionnaire, if you have it. It lists amounts due, and then it expires.",
+    maxFiles: 8,
     when: "always",
+    signal: "high",
+    missing:
+      "No estoppel or association questionnaire was provided. Ask the closing agent to order the estoppel. It is the association's own list of what this unit owes, and it expires.",
+    request: "Ask for the estoppel certificate and read the date it expires.",
+    attached:
+      "An estoppel or questionnaire was attached. This check does not read the file. Read the amounts due, any special assessment, and the expiration date.",
   },
   {
     id: "litigation",
-    title: "Pending litigation summary",
+    title: "Pending litigation disclosure",
     detail:
-      "A short summary, an attorney letter, or the estoppel section that lists claims. Do not upload a full court file.",
-    maxFiles: 2,
+      "Any disclosure or letter that lists pending cases. A full court file is not needed. If you were told there is none, you can still mark that you do not have a paper.",
+    maxFiles: 8,
     when: "always",
-  },
-  {
-    id: "resale-disclosure",
-    title: "Resale disclosure or question-and-answer sheet",
-    detail:
-      "The condominium FAQ sheet, or the HOA disclosure packet the contract names.",
-    maxFiles: 3,
-    when: "always",
+    signal: "standard",
+    missing:
+      "No pending litigation disclosure was provided. Ask the association, in writing, whether it is in a lawsuit or has a threatened claim, and whether owners can be assessed for it.",
+    request: "Ask for a written litigation disclosure, including threatened claims.",
+    attached:
+      "A litigation disclosure was attached. This check does not read the file. Note who is involved, what insurance covers, and any deductible owners might pay.",
   },
 ];
 
@@ -126,8 +193,7 @@ export function slotById(id: string) {
 
 export function slotApplies(slot: DocumentSlot, facts: BuyerFacts) {
   if (slot.when === "always") return true;
-  if (slot.when === "sirs") return sirsApplies(facts);
-  return milestoneApplies(facts);
+  return structuralRowsApply(facts);
 }
 
 export function applicableSlots(facts: BuyerFacts) {
@@ -272,7 +338,7 @@ export function isSlotId(id: string) {
 }
 
 export function isSlotChoice(value: string): value is SlotChoice {
-  return value === "not-available" || value === "skipped" || value === "uploaded";
+  return value === "not-available" || value === "uploaded";
 }
 
 export type PublicFile = {
@@ -300,9 +366,8 @@ export function documentRows(
   return DOCUMENT_SLOTS.filter((slot) => visible.has(slot.id)).map((slot) => {
     const slotFiles = files.filter((file) => file.slot === slot.id);
     const choice = choices[slot.id] ?? "";
-    let status: DocumentStatus = "skipped";
+    let status: DocumentStatus = "missing";
     if (slotFiles.length > 0) status = "received";
-    else if (choice === "uploaded") status = "missing";
     else if (choice === "not-available") status = "not-available";
     return {
       slot: slot.id,

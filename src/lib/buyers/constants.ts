@@ -15,7 +15,7 @@ export const FILE_TTL_DAYS = 30;
  */
 export const MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
-export const MAX_FILES = 24;
+export const MAX_FILES = 40;
 
 export const MAX_NOTE_CHARS = 500;
 export const MAX_INTAKE_NOTES = 2000;

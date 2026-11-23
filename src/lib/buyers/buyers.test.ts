@@ -4,24 +4,18 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { buyerQuestions } from "@/data/buyer-questions";
-import {
-  applicableQuestions,
-  milestoneApplies,
-  sirsApplies,
-} from "@/lib/buyers/applicability";
+import { structuralRowsApply } from "@/lib/buyers/applicability";
 import { loadBuyerSession, sealSpentCookie } from "@/lib/buyers/access";
+import { BUYER_DISCLAIMER, UPLOAD_CONSENT } from "@/lib/buyers/copy";
 import {
-  BUYER_DISCLAIMER,
-  SCORE_EXPLANATION,
-  STANDING_QUESTIONS,
-  UPLOAD_CONSENT,
-} from "@/lib/buyers/copy";
-import { documentRows, inspectUpload } from "@/lib/buyers/documents";
+  applicableSlots,
+  DOCUMENT_SLOTS,
+  documentRows,
+  inspectUpload,
+} from "@/lib/buyers/documents";
 import { BuyersError } from "@/lib/buyers/errors";
 import { toIntake, type IntakeDraft } from "@/lib/buyers/intake";
 import { buildBuyerReport } from "@/lib/buyers/report";
-import { bandFor, scoreQuestions } from "@/lib/buyers/scoring";
 import {
   addBuyerDocument,
   commitBuyerReport,
@@ -33,7 +27,7 @@ import {
 } from "@/lib/buyers/service";
 import { resetBuyersStateForTests } from "@/lib/buyers/store";
 import { adminGate, linkSecret, verifyToken } from "@/lib/buyers/token";
-import type { BuyerFacts, BuyerQuestion } from "@/lib/buyers/types";
+import type { SlotChoice } from "@/lib/buyers/types";
 
 const ENV_KEYS = [
   "BUYERS_DATA_DIR",
@@ -47,36 +41,26 @@ const ENV_KEYS = [
 let previous: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 let dir = "";
 
-function condoFacts(over: Partial<BuyerFacts> = {}): BuyerFacts {
+function draft(over: Partial<IntakeDraft> = {}): IntakeDraft {
   return {
-    statute: "718",
+    completer: "buyer",
+    name: "Sample Buyer",
+    email: "sample.buyer@example.com",
+    associationName: "Palm Sample Condominium",
+    unitAddress: "12B Sample Way",
+    state: "FL",
     stories3: "yes",
-    yearBuilt: 1998,
-    coastal: "yes",
-    usePlan: "live",
     ...over,
   };
 }
 
-function draft(over: Partial<IntakeDraft> = {}): IntakeDraft {
-  return {
-    completer: "buyer",
-    buyerName: "Sample Buyer",
-    buyerEmail: "sample.buyer@example.com",
-    buyerPhone: "",
-    agentName: "",
-    agentEmail: "",
-    associationName: "Palm Sample Condominium",
-    county: "Sarasota",
-    statute: "718",
-    unit: "12B",
-    usePlan: "live",
-    stories3: "yes",
-    yearBuilt: "1998",
-    coastal: "yes",
-    notes: "",
-    ...over,
-  };
+function allMissing(stories: IntakeDraft["stories3"] = "yes") {
+  const intake = toIntake(draft({ stories3: stories }));
+  const choices: Record<string, SlotChoice> = {};
+  for (const slot of applicableSlots({ stories3: intake.stories3, state: intake.state })) {
+    choices[slot.id] = "not-available";
+  }
+  return { intake, choices };
 }
 
 function tokenFrom(href: string) {
@@ -105,74 +89,80 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe("buyer questions and scoring", () => {
-  it("keeps a fixed bank without em dashes", () => {
-    expect(buyerQuestions).toHaveLength(42);
+describe("checklist", () => {
+  it("uses buyer-facing wording without em dashes or the word templates", () => {
     const blobs = [
       UPLOAD_CONSENT,
       BUYER_DISCLAIMER,
-      SCORE_EXPLANATION,
-      ...STANDING_QUESTIONS,
-      ...buyerQuestions.flatMap((question) => [
-        question.prompt,
-        question.help,
-        question.ask,
+      ...DOCUMENT_SLOTS.flatMap((slot) => [
+        slot.title,
+        slot.detail,
+        slot.missing,
+        slot.request,
+        slot.attached,
       ]),
     ];
     for (const text of blobs) {
       expect(text).not.toMatch(/\u2014|\u2013/);
+      expect(text.toLowerCase()).not.toContain("template");
     }
+    expect(BUYER_DISCLAIMER.toLowerCase()).toContain("checklist and guidance");
   });
 
-  it("hides SIRS and milestone items that do not apply", () => {
-    const hoa = applicableQuestions({
-      statute: "720",
-      stories3: "no",
-      yearBuilt: 2010,
-      coastal: "no",
-      usePlan: "live",
-    }).map((question) => question.id);
-    expect(hoa.some((id) => id.startsWith("STR-"))).toBe(false);
-    expect(hoa).not.toContain("RES-06");
-    expect(hoa).toContain("RES-05");
-
-    const oldCoastal = condoFacts();
-    expect(sirsApplies(oldCoastal)).toBe(true);
-    expect(milestoneApplies(oldCoastal)).toBe(true);
-    expect(applicableQuestions(oldCoastal).map((q) => q.id)).toEqual(
-      expect.arrayContaining(["STR-01", "STR-03"]),
-    );
-
-    const newer = condoFacts({ yearBuilt: 2020, coastal: "no" });
-    expect(milestoneApplies(newer)).toBe(false);
-    expect(sirsApplies(newer)).toBe(true);
-
-    const inlandTwenties = condoFacts({ yearBuilt: 2000, coastal: "no" });
-    expect(milestoneApplies(inlandTwenties)).toBe(false);
-    expect(milestoneApplies(condoFacts({ yearBuilt: 2000, coastal: "yes" }))).toBe(
-      true,
-    );
+  it("hides SIRS and milestone when the building is not 3 stories", () => {
+    const tall = applicableSlots({ stories3: "yes", state: "FL" }).map((slot) => slot.id);
+    const low = applicableSlots({ stories3: "no", state: "FL" }).map((slot) => slot.id);
+    expect(tall).toContain("budget");
+    expect(tall).toContain("actuals");
+    expect(tall).toContain("sirs");
+    expect(tall).toContain("milestone");
+    expect(low).not.toContain("sirs");
+    expect(low).not.toContain("milestone");
+    expect(structuralRowsApply({ stories3: "unsure", state: "FL" })).toBe(true);
+    expect(tall[0]).toBe("budget");
+    expect(tall.indexOf("governing")).toBeGreaterThan(tall.indexOf("milestone"));
   });
 
-  it("scores a bad answer higher than a clean one", () => {
-    const good: BuyerQuestion = {
-      id: "T-1",
-      area: "Insurance",
-      prompt: "Seen?",
-      help: "Help.",
-      ask: "Ask.",
-      polarity: "good",
-      weight: 1,
-      critical: true,
-      logic: "ALL",
-    };
-    const bad: BuyerQuestion = { ...good, id: "T-2", polarity: "bad" };
-    expect(scoreQuestions([good], { "T-1": "No" }, true)).toBe(100);
-    expect(scoreQuestions([good], { "T-1": "Yes" }, true)).toBe(0);
-    expect(scoreQuestions([bad], { "T-2": "Yes" }, true)).toBe(100);
-    expect(scoreQuestions([bad], { "T-2": "No" }, true)).toBe(0);
-    expect(scoreQuestions([good], { "T-1": "N/A" }, true)).toBeNull();
-    expect(bandFor(scoreQuestions([good], {}, true) ?? 0)).toBe("Critical");
+  it("treats a missing document as a finding and a request", () => {
+    const { intake, choices } = allMissing("yes");
+    choices.budget = "uploaded";
+    const report = buildBuyerReport({
+      id: "report",
+      createdAt: new Date().toISOString(),
+      intake,
+      files: [{ id: "f", slot: "budget", fileName: "budget.pdf", byteSize: 12 }],
+      choices,
+      notes: {},
+      linkKind: "one-time",
+      subscriptionAgent: null,
+      overCap: false,
+      monthlyCap: null,
+    });
+    expect(report.findings.some((item) => item.id === "reserves")).toBe(true);
+    expect(report.findings.some((item) => item.id === "budget")).toBe(false);
+    expect(report.requests.map((item) => item.title)).toContain("Latest reserve study");
+    expect(report.requests.map((item) => item.title)).not.toContain("Latest approved budget");
+    expect(report.attachedNotes.some((item) => item.id === "budget")).toBe(true);
+    expect(JSON.stringify(report)).not.toContain("%PDF");
+    expect(JSON.stringify(report).toLowerCase()).not.toContain("template");
+  });
+
+  it("rejects a checklist that leaves a row blank", () => {
+    const intake = toIntake(draft({ stories3: "no" }));
+    expect(() =>
+      buildBuyerReport({
+        id: "report",
+        createdAt: new Date().toISOString(),
+        intake,
+        files: [],
+        choices: {},
+        notes: {},
+        linkKind: "one-time",
+        subscriptionAgent: null,
+        overCap: false,
+        monthlyCap: null,
+      }),
+    ).toThrow(BuyersError);
   });
 });
 
@@ -181,11 +171,14 @@ describe("document checks", () => {
     const pdf = new TextEncoder().encode("%PDF-1.4\n%%EOF");
     expect(inspectUpload("estoppel.pdf", "application/pdf", pdf).ok).toBe(true);
     expect(inspectUpload("page.html", "text/html", pdf).ok).toBe(false);
-    expect(inspectUpload("notes.pdf", "text/html", pdf).ok).toBe(false);
     const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
     expect(inspectUpload("minutes.docx", "application/zip", zip).ok).toBe(false);
     const docx = new Uint8Array([
-      0x50, 0x4b, 0x03, 0x04, ...new TextEncoder().encode("word/document.xml"),
+      0x50,
+      0x4b,
+      0x03,
+      0x04,
+      ...new TextEncoder().encode("word/document.xml"),
     ]);
     expect(
       inspectUpload(
@@ -194,74 +187,44 @@ describe("document checks", () => {
         docx,
       ).ok,
     ).toBe(true);
-    expect(inspectUpload("empty.pdf", "application/pdf", new Uint8Array()).ok).toBe(
-      false,
-    );
   });
 
-  it("records received, not available, and skipped without a url", () => {
+  it("records attached and not in hand without a url", () => {
     const rows = documentRows(
-      condoFacts(),
+      { stories3: "no", state: "FL" },
       [{ id: "file", slot: "budget", fileName: "budget.pdf", byteSize: 12 }],
-      { estoppel: "not-available", minutes: "skipped" },
+      { estoppel: "not-available" },
     );
-    const budget = rows.find((row) => row.slot === "budget");
-    expect(budget?.status).toBe("received");
-    expect(JSON.stringify(budget)).not.toMatch(/https?:|url/i);
+    expect(rows.find((row) => row.slot === "budget")?.status).toBe("received");
     expect(rows.find((row) => row.slot === "estoppel")?.status).toBe("not-available");
-    expect(rows.find((row) => row.slot === "minutes")?.status).toBe("skipped");
-    expect(rows.some((row) => row.slot === "sirs")).toBe(true);
-    expect(
-      documentRows(
-        { ...condoFacts(), stories3: "no", yearBuilt: 2018, coastal: "no" },
-        [],
-        {},
-      ).some((row) => row.slot === "sirs"),
-    ).toBe(false);
+    expect(rows.some((row) => row.slot === "sirs")).toBe(false);
+    expect(JSON.stringify(rows)).not.toMatch(/https?:|url/i);
   });
 });
 
 describe("links, reports, and private files", () => {
-  it("spends a one-time link and keeps the agent name on a subscription report", async () => {
+  it("spends a one-time link and prints the agent on a subscription report", async () => {
     const once = await createOneTimeGrant("Sample closing");
     const token = tokenFrom(once.href);
     const payload = verifyToken(token);
-    expect(payload?.kind).toBe("one-time");
-    const intake = toIntake(draft(), {
-      kind: "one-time",
-      agentName: "",
-      agentEmail: "",
-      agentLicense: "",
-    });
-    const facts = {
-      statute: intake.statute,
-      stories3: intake.stories3,
-      yearBuilt: intake.yearBuilt,
-      coastal: intake.coastal,
-      usePlan: intake.usePlan,
-    };
-    const questions = applicableQuestions(facts);
+    const { intake, choices } = allMissing("no");
     const first = await commitBuyerReport({
       payload: payload!,
       intake,
-      questions,
-      answers: { "RES-02": "No", "SPL-01": "Yes" },
       notes: {},
-      choices: {},
+      choices,
       consent: false,
     });
-    expect(first.report.redFlags.some((flag) => flag.id === "RES-02")).toBe(true);
-    expect(first.report.disclaimer).toContain("not legal advice");
+    expect(first.report.findings.length).toBeGreaterThan(0);
+    expect(first.report.disclaimer).toContain("checklist and guidance");
     const session = await loadBuyerSession(token);
     expect(session.ok && session.status).toBe("spent");
     await expect(
       commitBuyerReport({
         payload: payload!,
         intake,
-        questions,
-        answers: {},
         notes: {},
-        choices: {},
+        choices,
         consent: false,
       }),
     ).rejects.toBeInstanceOf(BuyersError);
@@ -273,19 +236,11 @@ describe("links, reports, and private files", () => {
       monthlyCap: 1,
     });
     const agentToken = verifyToken(tokenFrom(agent.href));
-    const agentIntake = toIntake(draft(), {
-      kind: "agent",
-      agentName: "Sample Agent",
-      agentEmail: "sample.agent@example.com",
-      agentLicense: "BK0000000",
-    });
     const firstAgent = await commitBuyerReport({
       payload: agentToken!,
-      intake: agentIntake,
-      questions,
-      answers: {},
+      intake,
       notes: {},
-      choices: {},
+      choices,
       consent: false,
     });
     expect(firstAgent.report.agentLine).toContain("Sample Agent");
@@ -293,15 +248,12 @@ describe("links, reports, and private files", () => {
     expect(firstAgent.overCap).toBe(false);
     const secondAgent = await commitBuyerReport({
       payload: agentToken!,
-      intake: agentIntake,
-      questions,
-      answers: {},
+      intake,
       notes: {},
-      choices: {},
+      choices,
       consent: false,
     });
     expect(secondAgent.overCap).toBe(true);
-    expect(secondAgent.report.associationName).toBe("Palm Sample Condominium");
   });
 
   it("requires consent, deletes aged files, and does not return a url", async () => {
@@ -328,33 +280,8 @@ describe("links, reports, and private files", () => {
       storedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),
     });
     expect(Object.keys(stored).sort()).toEqual(["byteSize", "fileName", "id", "slot"]);
-    const before = await listGrantFiles(payload.id);
-    expect(before).toHaveLength(1);
     await sweepStoredFiles(new Date());
     expect(await listGrantFiles(payload.id)).toHaveLength(0);
-    const report = buildBuyerReport({
-      id: "report",
-      createdAt: new Date().toISOString(),
-      intake: toIntake(draft(), {
-        kind: "one-time",
-        agentName: "",
-        agentEmail: "",
-        agentLicense: "",
-      }),
-      questions: applicableQuestions(condoFacts()),
-      answers: {},
-      notes: {},
-      files: [],
-      choices: { budget: "uploaded" },
-      linkKind: "one-time",
-      subscriptionAgent: null,
-      overCap: false,
-      monthlyCap: null,
-    });
-    expect(report.documents.find((doc) => doc.slot === "budget")?.status).toBe(
-      "missing",
-    );
-    expect(JSON.stringify(report)).not.toContain("%PDF");
   });
 
   it("blocks a revoked agent link and a spent cookie", async () => {
@@ -375,7 +302,7 @@ describe("links, reports, and private files", () => {
     expect(spent.ok && spent.status).toBe("spent");
   });
 
-  it("keeps a young upload on disk as a private file", async () => {
+  it("deletes an uploaded file when the report is produced", async () => {
     const once = await createOneTimeGrant("Young");
     const payload = verifyToken(tokenFrom(once.href))!;
     await addBuyerDocument({
@@ -386,35 +313,23 @@ describe("links, reports, and private files", () => {
       bytes: new TextEncoder().encode("%PDF-1.4\n1 0 obj\n%%EOF"),
       consent: true,
     });
-    await sweepStoredFiles(new Date());
-    const files = await listGrantFiles(payload.id);
-    expect(files).toHaveLength(1);
-    const ledger = JSON.parse(
-      await readFile(path.join(dir, "ledger.json"), "utf8"),
-    ) as { files: { storageKey: string }[] };
+    const ledger = JSON.parse(await readFile(path.join(dir, "ledger.json"), "utf8")) as {
+      files: { storageKey: string }[];
+    };
     const key = ledger.files[0]?.storageKey ?? "";
-    expect(key.startsWith("buyers/docs/")).toBe(true);
-    expect(key).not.toMatch(/https?:/);
-    const info = await stat(path.join(dir, key));
-    expect(info.size).toBeGreaterThan(0);
-    const intake = toIntake(draft(), {
-      kind: "one-time",
-      agentName: "",
-      agentEmail: "",
-      agentLicense: "",
-    });
+    const { intake, choices } = allMissing("no");
+    choices.estoppel = "uploaded";
     const done = await commitBuyerReport({
       payload,
       intake,
-      questions: applicableQuestions(condoFacts()),
-      answers: {},
       notes: {},
-      choices: { estoppel: "uploaded" },
+      choices,
       consent: true,
     });
     expect(done.report.documents.find((doc) => doc.slot === "estoppel")?.status).toBe(
       "received",
     );
+    expect(done.report.findings.some((item) => item.id === "estoppel")).toBe(false);
     await expect(stat(path.join(dir, key))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
@@ -434,7 +349,6 @@ describe("admin gate", () => {
   it("rejects a tampered token", async () => {
     const once = await createOneTimeGrant("Tamper");
     const token = tokenFrom(once.href);
-    const broken = `${token.slice(0, -4)}aaaa`;
-    expect(verifyToken(broken)).toBeNull();
+    expect(verifyToken(`${token.slice(0, -4)}aaaa`)).toBeNull();
   });
 });

@@ -1,7 +1,5 @@
 import { emptyIntake, type IntakeDraft } from "@/lib/buyers/intake";
 import type { BuyerReport } from "@/lib/buyers/report";
-import type { AnswerValue } from "@/lib/buyers/types";
-
 export type StoredFile = {
   id: string;
   fileName: string;
@@ -9,13 +7,11 @@ export type StoredFile = {
 };
 
 export type BuyerDraft = {
-  step: "intake" | "questions" | "upload" | "results";
-  areaIndex: number;
+  step: "intake" | "checklist" | "results";
   intake: IntakeDraft;
-  answers: Record<string, AnswerValue | "">;
   notes: Record<string, string>;
   consent: boolean;
-  choices: Record<string, "not-available" | "skipped" | "">;
+  missing: Record<string, boolean>;
   files: Record<string, StoredFile[]>;
 };
 
@@ -30,12 +26,10 @@ const EVENT = "tbc-buyers";
 export function emptyDraft(): BuyerDraft {
   return {
     step: "intake",
-    areaIndex: 0,
     intake: emptyIntake(),
-    answers: {},
     notes: {},
     consent: false,
-    choices: {},
+    missing: {},
     files: {},
   };
 }
@@ -88,9 +82,8 @@ export function loadDraft(grantId: string): BuyerDraft {
       ...emptyDraft(),
       ...parsed,
       intake: { ...emptyIntake(), ...parsed.intake },
-      answers: parsed.answers ?? {},
       notes: parsed.notes ?? {},
-      choices: parsed.choices ?? {},
+      missing: parsed.missing ?? {},
       files: parsed.files ?? {},
     };
     drafts.set(grantId, { raw, draft });

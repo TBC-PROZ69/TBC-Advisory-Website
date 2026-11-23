@@ -12,44 +12,51 @@ import {
   type DocumentSlot,
 } from "@/lib/buyers/documents";
 
-export function UploadStep({
+export function ChecklistStep({
   token,
   slots,
   consent,
-  choices,
+  missing,
+  notes,
   files,
   onConsent,
-  onChoice,
+  onMissing,
+  onNote,
   onFileAdded,
   onFileRemoved,
   onBack,
-  onContinue,
+  onSubmit,
   busy,
 }: {
   token: string;
   slots: DocumentSlot[];
   consent: boolean;
-  choices: Record<string, "not-available" | "skipped" | "">;
+  missing: Record<string, boolean>;
+  notes: Record<string, string>;
   files: Record<string, StoredFile[]>;
   onConsent: (value: boolean) => void;
-  onChoice: (slot: string, choice: "not-available" | "skipped" | "") => void;
+  onMissing: (slot: string, value: boolean) => void;
+  onNote: (slot: string, note: string) => void;
   onFileAdded: (slot: string, file: StoredFile) => void;
   onFileRemoved: (slot: string, fileId: string) => void;
   onBack: () => void;
-  onContinue: () => void;
+  onSubmit: () => void;
   busy: boolean;
 }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const slotRef = useRef("");
-
   const allFiles = Object.values(files).flat();
+  const addressed = slots.filter(
+    (slot) => (files[slot.id] ?? []).length > 0 || missing[slot.id],
+  ).length;
+  const ready = addressed === slots.length && !pending;
 
   async function send(slot: DocumentSlot, file: File) {
     setError("");
     if (!consent) {
-      setError("Confirm the consent line before uploading.");
+      setError("Confirm the consent line before attaching a file.");
       return;
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -75,31 +82,21 @@ export function UploadStep({
     form.set("file", file);
     setPending(slot.id);
     try {
-      const response = await fetch("/api/buyers/documents", {
-        method: "POST",
-        body: form,
-      });
+      const response = await fetch("/api/buyers/documents", { method: "POST", body: form });
       const data = (await response.json().catch(() => null)) as
         | { error?: string; file?: StoredFile & { slot: string } }
         | null;
-      if (!response.ok || !data?.file) {
+      if (!response.ok || !data?.file || "url" in data.file) {
         throw new Error(data?.error || "The file could not be stored.");
-      }
-      if ("url" in data.file) {
-        throw new Error("The file could not be stored.");
       }
       onFileAdded(slot.id, {
         id: data.file.id,
         fileName: data.file.fileName,
         byteSize: data.file.byteSize,
       });
-      onChoice(slot.id, "");
+      onMissing(slot.id, false);
     } catch (uploadError) {
-      setError(
-        uploadError instanceof Error
-          ? uploadError.message
-          : "The file could not be stored.",
-      );
+      setError(uploadError instanceof Error ? uploadError.message : "The file could not be stored.");
     } finally {
       setPending("");
     }
@@ -114,37 +111,36 @@ export function UploadStep({
       form.set("slot", slotId);
       form.set("action", "remove");
       form.set("fileId", fileId);
-      const response = await fetch("/api/buyers/documents", {
-        method: "POST",
-        body: form,
-      });
+      const response = await fetch("/api/buyers/documents", { method: "POST", body: form });
       const data = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) throw new Error(data?.error || "The file could not be removed.");
       onFileRemoved(slotId, fileId);
     } catch (removeError) {
-      setError(
-        removeError instanceof Error ? removeError.message : "The file could not be removed.",
-      );
+      setError(removeError instanceof Error ? removeError.message : "The file could not be removed.");
     } finally {
       setPending("");
     }
   }
 
   return (
-    <div className="mt-8 space-y-8">
+    <div className="mt-8 space-y-6">
       <div>
-        <h2 className="font-heading text-2xl text-navy">Documents</h2>
-        <p className="mt-3 text-sm leading-relaxed text-navy/75">
-          Attach what a buyer would usually read before closing. Each item is
-          optional. Choose Upload, Not available, or Skip. Not available means
-          you asked and the document does not exist or was refused. Skip means
-          you are not attaching it. Files stay private, are not published, and
-          are deleted when the report is produced. This screening records the
-          file name only. It does not read the file for findings.
-        </p>
-        <p className="mt-3 text-sm text-navy/60">
-          PDF, JPEG, PNG, WEBP, GIF, DOCX, or XLSX. 4 MB per file, 32 MB for
-          the whole packet. ZIP files are not accepted, so send separate PDFs.
+        <div className="flex items-center justify-between text-xs tracking-wide text-navy/60 uppercase">
+          <span>Checklist</span>
+          <span>
+            {addressed} of {slots.length} addressed
+          </span>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-navy/10">
+          <div
+            className="h-full bg-primary"
+            style={{ width: `${slots.length ? Math.round((addressed / slots.length) * 100) : 0}%` }}
+          />
+        </div>
+        <p className="mt-3 text-sm leading-relaxed text-navy/70">
+          Each row needs one choice: attach a file, or mark that you do not have
+          it. You can attach more than one file on a row. A missing document is
+          recorded as a finding, not as a blank.
         </p>
       </div>
 
@@ -171,13 +167,18 @@ export function UploadStep({
         }}
       />
 
-      <ol className="space-y-6">
-        {slots.map((slot) => {
+      <ol className="space-y-4">
+        {slots.map((slot, index) => {
           const slotFiles = files[slot.id] ?? [];
-          const choice = choices[slot.id] ?? "";
+          const markedMissing = Boolean(missing[slot.id]) && slotFiles.length === 0;
+          const done = slotFiles.length > 0 || markedMissing;
           return (
             <li key={slot.id} className="rounded-md border border-navy/10 bg-card p-4">
-              <h3 className="font-heading text-lg text-navy">{slot.title}</h3>
+              <p className="text-xs text-navy/45">
+                {index + 1} of {slots.length}
+                {done ? " · Addressed" : ""}
+              </p>
+              <h3 className="font-heading mt-1 text-lg text-navy">{slot.title}</h3>
               <p className="mt-1 text-sm leading-relaxed text-navy/65">{slot.detail}</p>
               {slotFiles.length > 0 ? (
                 <ul className="mt-3 space-y-2 text-sm">
@@ -192,52 +193,52 @@ export function UploadStep({
                       <button
                         type="button"
                         className="text-sm text-primary underline-offset-4 hover:underline"
-                        onClick={() => void remove(slot.id, file.id)}
                         disabled={pending === slot.id}
+                        onClick={() => void remove(slot.id, file.id)}
                       >
                         Remove
                       </button>
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="mt-3 text-sm text-navy/70">
-                  {choice === "not-available"
-                    ? "Marked not available."
-                    : choice === "skipped"
-                      ? "Skipped."
-                      : "No file yet."}
-                </p>
-              )}
-              <div className="mt-4 flex flex-wrap gap-2">
+              ) : null}
+              <div className="mt-4 flex flex-wrap items-center gap-3">
                 <WizardButton
                   disabled={!consent || pending === slot.id || slotFiles.length >= slot.maxFiles}
                   onPress={() => {
                     if (!consent) {
-                      setError("Confirm the consent line before uploading.");
+                      setError("Confirm the consent line before attaching a file.");
                       return;
                     }
                     slotRef.current = slot.id;
                     inputRef.current?.click();
                   }}
                 >
-                  {pending === slot.id ? "Working…" : "Upload"}
+                  {pending === slot.id ? "Working…" : "Attach file"}
                 </WizardButton>
-                <WizardButton
-                  variant="outline"
-                  disabled={slotFiles.length > 0 || pending === slot.id}
-                  onPress={() => onChoice(slot.id, "not-available")}
-                >
-                  Not available
-                </WizardButton>
-                <WizardButton
-                  variant="outline"
-                  disabled={slotFiles.length > 0 || pending === slot.id}
-                  onPress={() => onChoice(slot.id, "skipped")}
-                >
-                  Skip
-                </WizardButton>
+                <label className="flex items-center gap-2 text-sm text-navy">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={markedMissing}
+                    disabled={slotFiles.length > 0 || pending === slot.id}
+                    onChange={(event) => onMissing(slot.id, event.target.checked)}
+                  />
+                  I don&apos;t have this
+                </label>
               </div>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm text-navy/60">Add a note</summary>
+                <label className="mt-2 block text-xs text-navy/55">
+                  Optional
+                  <textarea
+                    className="mt-1 min-h-16 w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-navy"
+                    maxLength={500}
+                    value={notes[slot.id] ?? ""}
+                    onChange={(event) => onNote(slot.id, event.target.value)}
+                  />
+                </label>
+              </details>
             </li>
           );
         })}
@@ -248,12 +249,18 @@ export function UploadStep({
           {error}
         </p>
       ) : null}
+      {!ready ? (
+        <p className="text-sm text-navy/60">
+          Attach a file or mark &quot;I don&apos;t have this&quot; on every row before
+          the report can be prepared.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-3">
         <WizardButton variant="outline" onPress={onBack} disabled={busy || Boolean(pending)}>
           Back
         </WizardButton>
-        <WizardButton onPress={onContinue} disabled={busy || Boolean(pending)}>
+        <WizardButton onPress={onSubmit} disabled={!ready || busy}>
           {busy ? "Preparing the report…" : "See my report"}
         </WizardButton>
       </div>
