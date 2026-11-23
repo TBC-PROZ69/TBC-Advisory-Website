@@ -39,6 +39,13 @@ export function buyerReportText(report: BuyerReport) {
     lines.push(`${finding.title}: ${finding.text}`);
     if (finding.note) lines.push(`Note: ${finding.note}`);
   }
+  if (report.notApplicable.length > 0) {
+    lines.push(
+      "",
+      "Doesn't apply (not a risk finding)",
+      report.notApplicable.map((item) => item.title).join("; "),
+    );
+  }
   lines.push("", "Documents to request before closing");
   if (report.requests.length === 0) lines.push("None. Every checklist item was attached.");
   for (const item of report.requests) lines.push(`- ${item.title}: ${item.ask}`);

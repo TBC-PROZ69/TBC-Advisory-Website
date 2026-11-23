@@ -12,6 +12,7 @@ export type BuyerDraft = {
   notes: Record<string, string>;
   consent: boolean;
   missing: Record<string, boolean>;
+  na: Record<string, boolean>;
   files: Record<string, StoredFile[]>;
 };
 
@@ -30,6 +31,7 @@ export function emptyDraft(): BuyerDraft {
     notes: {},
     consent: false,
     missing: {},
+    na: {},
     files: {},
   };
 }
@@ -84,6 +86,7 @@ export function loadDraft(grantId: string): BuyerDraft {
       intake: { ...emptyIntake(), ...parsed.intake },
       notes: parsed.notes ?? {},
       missing: parsed.missing ?? {},
+      na: parsed.na ?? {},
       files: parsed.files ?? {},
     };
     drafts.set(grantId, { raw, draft });

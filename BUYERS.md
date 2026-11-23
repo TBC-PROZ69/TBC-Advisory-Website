@@ -35,7 +35,7 @@ Billing mode is `manual`. Stripe customer, subscription, and checkout ids are st
 2. A document checklist. Each row is Attach file or "I don't have this." A short note is available, collapsed. The report can be prepared only when every visible row is addressed.
 3. Results list each missing document as a finding and as an item to request before closing. Attached files get short guidance. The files themselves are not read.
 
-SIRS and the milestone inspection appear only when the building may have 3 or more stories. Marking "No" on that question leaves those rows out, so a one-story community is not told a missing SIRS is a risk.
+Every row is shown. Core records are only Attach file or I don't have this. SIRS, the milestone report, special assessment history, the estoppel, and litigation also offer Doesn't apply. That choice is not a finding and is not on the request list. The intro asks whether the tallest residential building is under 3 stories, 3 or more, or not sure. Under 3 pre-selects Doesn't apply for SIRS and the milestone report. Those marks can still be changed.
 
 ## Documents
 

@@ -20,10 +20,10 @@ import {
   type BuyerDraft,
 } from "@/components/buyers/storage";
 import { Container } from "@/components/container";
-import { applicableSlots } from "@/lib/buyers/documents";
+import { applicableSlots, HEIGHT_NA_SLOTS } from "@/lib/buyers/documents";
 import { intakeIssues, toIntake } from "@/lib/buyers/intake";
 import type { BuyerReport } from "@/lib/buyers/report";
-import type { BuyerSessionView } from "@/lib/buyers/types";
+import type { BuyerSessionView, Tri } from "@/lib/buyers/types";
 import { site } from "@/lib/site";
 
 export function BuyersApp({
@@ -86,11 +86,12 @@ export function BuyersApp({
     setBusy(true);
     setError("");
     try {
-      const choices: Record<string, "uploaded" | "not-available"> = {};
+      const choices: Record<string, "uploaded" | "not-available" | "not-applicable"> = {};
       for (const slot of slots) {
         if ((draft.files[slot.id] ?? []).length > 0) choices[slot.id] = "uploaded";
+        else if (draft.na[slot.id] && slot.allowsNa) choices[slot.id] = "not-applicable";
         else if (draft.missing[slot.id]) choices[slot.id] = "not-available";
-        else throw new Error("Every row needs a file or a mark that you do not have it.");
+        else throw new Error("Every row needs a choice before the report can be prepared.");
       }
       const response = await fetch("/api/buyers/report", {
         method: "POST",
@@ -196,7 +197,15 @@ export function BuyersApp({
               {draft.step === "intake" ? (
                 <IntakeForm
                   value={draft.intake}
-                  onChange={(intake) => update((current) => ({ ...current, intake }))}
+                  onChange={(intake) =>
+                    update((current) =>
+                      applyStoriesDefault(
+                        { ...current, intake },
+                        current.intake.stories3,
+                        intake.stories3,
+                      ),
+                    )
+                  }
                   onContinue={() => update((current) => ({ ...current, step: "checklist" }))}
                   onSample={
                     allowSample
@@ -213,6 +222,7 @@ export function BuyersApp({
                     slots={slots}
                     consent={draft.consent}
                     missing={draft.missing}
+                    na={draft.na}
                     notes={draft.notes}
                     files={draft.files}
                     busy={busy}
@@ -221,6 +231,14 @@ export function BuyersApp({
                       update((current) => ({
                         ...current,
                         missing: { ...current.missing, [slot]: value },
+                        na: value ? { ...current.na, [slot]: false } : current.na,
+                      }))
+                    }
+                    onNa={(slot, value) =>
+                      update((current) => ({
+                        ...current,
+                        na: { ...current.na, [slot]: value },
+                        missing: value ? { ...current.missing, [slot]: false } : current.missing,
                       }))
                     }
                     onNote={(slot, note) =>
@@ -264,4 +282,27 @@ export function BuyersApp({
       </Container>
     </div>
   );
+}
+
+function applyStoriesDefault(
+  draft: BuyerDraft,
+  previous: Tri | "",
+  next: Tri | "",
+): BuyerDraft {
+  if (next === previous) return draft;
+  const na = { ...draft.na };
+  const missing = { ...draft.missing };
+  if (next === "no") {
+    for (const id of HEIGHT_NA_SLOTS) {
+      if ((draft.files[id] ?? []).length > 0) continue;
+      na[id] = true;
+      missing[id] = false;
+    }
+  } else if (previous === "no") {
+    for (const id of HEIGHT_NA_SLOTS) {
+      if ((draft.files[id] ?? []).length > 0) continue;
+      na[id] = false;
+    }
+  }
+  return { ...draft, na, missing };
 }

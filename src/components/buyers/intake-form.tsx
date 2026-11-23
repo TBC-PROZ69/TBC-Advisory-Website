@@ -143,17 +143,17 @@ export function IntakeForm({
 
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium">
-          Any residential building with 3 or more stories?
+          Tallest residential building
         </legend>
         <p className="text-sm text-navy/60">
-          This decides whether the SIRS and milestone rows appear. Those are
-          Florida items for taller residential buildings.
+          Under 3 marks SIRS and the milestone report as Doesn&apos;t apply. You can
+          change that on the checklist.
         </p>
         <div className="flex flex-wrap gap-2">
           {(
             [
-              ["yes", "Yes"],
-              ["no", "No"],
+              ["no", "Under 3"],
+              ["yes", "3 or more"],
               ["unsure", "Not sure"],
             ] as const
           ).map(([code, label]) => (

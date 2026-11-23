@@ -1,4 +1,3 @@
-import { structuralRowsApply } from "@/lib/buyers/applicability";
 import { MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES } from "@/lib/buyers/constants";
 import type { BuyerFacts, DocumentStatus, SlotChoice } from "@/lib/buyers/types";
 
@@ -11,6 +10,8 @@ export type DocumentSlot = {
   maxFiles: number;
   when: SlotWhen;
   signal: "high" | "standard";
+  /** Conditional rows can be marked Doesn't apply. That is not a risk finding. */
+  allowsNa: boolean;
   missing: string;
   request: string;
   attached: string;
@@ -25,6 +26,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     maxFiles: 8,
     when: "always",
     signal: "high",
+    allowsNa: false,
     missing:
       "No latest approved budget was provided. Ask the seller or the association for it before closing. Without the budget, the dues you were quoted are just a number.",
     request: "Ask for the latest approved budget.",
@@ -39,6 +41,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     maxFiles: 8,
     when: "always",
     signal: "high",
+    allowsNa: false,
     missing:
       "No recent actuals were provided. Ask for the latest balance sheet and income statement before closing. A budget without actuals does not show whether the association is collecting and spending as planned.",
     request: "Ask for the latest balance sheet and income statement.",
@@ -52,6 +55,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     maxFiles: 8,
     when: "always",
     signal: "high",
+    allowsNa: false,
     missing:
       "No reserve study was provided. Ask the seller or the association for it before closing. A missing reserve study is a risk signal: you cannot see whether reserves match the work still ahead.",
     request: "Ask for the latest reserve study.",
@@ -61,11 +65,11 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
   {
     id: "sirs",
     title: "SIRS (Structural Integrity Reserve Study)",
-    detail:
-      "Shown because a residential building may have 3 or more stories. Florida condominiums in that group generally must have a SIRS.",
+    detail: "Required in Florida for condos 3 stories or higher.",
     maxFiles: 8,
     when: "structural",
     signal: "high",
+    allowsNa: true,
     missing:
       "No SIRS was provided. Ask whether this building requires a Structural Integrity Reserve Study, and for the current study if it does. A missing SIRS, where one is required, is a risk signal for safety and for a future special assessment.",
     request:
@@ -76,11 +80,11 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
   {
     id: "milestone",
     title: "Milestone inspection report",
-    detail:
-      "Shown because a residential building may have 3 or more stories. For a condominium or cooperative building, a milestone inspection is generally due at 30 years, or at 25 years near the coast.",
+    detail: "Required in Florida for condominium and cooperative buildings 3 stories or higher.",
     maxFiles: 8,
     when: "structural",
     signal: "high",
+    allowsNa: true,
     missing:
       "No milestone inspection report was provided. Ask whether an inspection is due for this building, and for the report if it is. A missing report, where an inspection was required, is a risk signal.",
     request:
@@ -95,6 +99,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     maxFiles: 8,
     when: "always",
     signal: "standard",
+    allowsNa: false,
     missing:
       "Governing documents were not provided. Ask for the declaration, bylaws, and rules before closing. Those papers are where rental limits, use rules, and assessment powers usually sit.",
     request: "Ask for the declaration, bylaws, and rules and regulations.",
@@ -108,6 +113,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     maxFiles: 8,
     when: "always",
     signal: "standard",
+    allowsNa: false,
     missing:
       "No year-end financial report or audit was provided. Ask for the latest one. It is the longer record behind the monthly numbers.",
     request: "Ask for the most recent annual or year-end financial report, or the audit.",
@@ -121,6 +127,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     maxFiles: 12,
     when: "always",
     signal: "standard",
+    allowsNa: false,
     missing:
       "Recent board minutes were not provided. Ask for the last 6 to 12 months. Minutes are where special assessments, insurance trouble, and repairs usually show up before a listing does.",
     request: "Ask for board minutes for the last 6 to 12 months.",
@@ -135,6 +142,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     maxFiles: 8,
     when: "always",
     signal: "high",
+    allowsNa: false,
     missing:
       "Insurance declaration pages were not provided. Ask for them before closing. The deductible, especially wind or flood, can become an owner assessment after a storm.",
     request:
@@ -145,10 +153,12 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
   {
     id: "special-assessments",
     title: "Special assessment history or notices",
-    detail: "Notices or a history of special assessments, approved or only proposed.",
+    detail:
+      "Notices or a history of special assessments. If there have been none, choose Doesn't apply.",
     maxFiles: 8,
     when: "always",
     signal: "high",
+    allowsNa: true,
     missing:
       "No special assessment history or notices were provided. Ask the association, in writing, whether any special assessment is approved, unpaid, or under discussion, and who must pay it at closing.",
     request: "Ask for special assessment history and any current notices.",
@@ -159,10 +169,11 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     id: "estoppel",
     title: "Estoppel certificate or questionnaire",
     detail:
-      "The estoppel or association questionnaire, if you have it. It lists amounts due, and then it expires.",
+      "The estoppel lists what this unit owes, and then it expires. Choose Doesn't apply only if this closing will not include one.",
     maxFiles: 8,
     when: "always",
     signal: "high",
+    allowsNa: true,
     missing:
       "No estoppel or association questionnaire was provided. Ask the closing agent to order the estoppel. It is the association's own list of what this unit owes, and it expires.",
     request: "Ask for the estoppel certificate and read the date it expires.",
@@ -173,10 +184,11 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     id: "litigation",
     title: "Pending litigation disclosure",
     detail:
-      "Any disclosure or letter that lists pending cases. A full court file is not needed. If you were told there is none, you can still mark that you do not have a paper.",
+      "A short disclosure of pending cases. If there is no pending or threatened case, choose Doesn't apply.",
     maxFiles: 8,
     when: "always",
     signal: "standard",
+    allowsNa: true,
     missing:
       "No pending litigation disclosure was provided. Ask the association, in writing, whether it is in a lawsuit or has a threatened claim, and whether owners can be assessed for it.",
     request: "Ask for a written litigation disclosure, including threatened claims.",
@@ -191,14 +203,13 @@ export function slotById(id: string) {
   return DOCUMENT_SLOTS.find((slot) => slot.id === id) ?? null;
 }
 
-export function slotApplies(slot: DocumentSlot, facts: BuyerFacts) {
-  if (slot.when === "always") return true;
-  return structuralRowsApply(facts);
+/** Every row is shown. Conditional rows use Doesn't apply instead of being hidden. */
+export function applicableSlots(facts?: BuyerFacts) {
+  void facts;
+  return DOCUMENT_SLOTS;
 }
 
-export function applicableSlots(facts: BuyerFacts) {
-  return DOCUMENT_SLOTS.filter((slot) => slotApplies(slot, facts));
-}
+export const HEIGHT_NA_SLOTS = ["sirs", "milestone"] as const;
 
 const EXT_MIME: Record<string, string[]> = {
   pdf: ["application/pdf", "application/octet-stream"],
@@ -338,7 +349,7 @@ export function isSlotId(id: string) {
 }
 
 export function isSlotChoice(value: string): value is SlotChoice {
-  return value === "not-available" || value === "uploaded";
+  return value === "not-available" || value === "not-applicable" || value === "uploaded";
 }
 
 export type PublicFile = {
@@ -368,6 +379,7 @@ export function documentRows(
     const choice = choices[slot.id] ?? "";
     let status: DocumentStatus = "missing";
     if (slotFiles.length > 0) status = "received";
+    else if (choice === "not-applicable") status = "not-applicable";
     else if (choice === "not-available") status = "not-available";
     return {
       slot: slot.id,

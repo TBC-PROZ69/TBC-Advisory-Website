@@ -112,6 +112,20 @@ export function ReportView({
         )}
       </section>
 
+      {report.notApplicable.length > 0 ? (
+        <section className="mt-8">
+          <h3 className="font-heading text-2xl text-navy">Doesn&apos;t apply</h3>
+          <p className="mt-2 text-sm text-navy/65">
+            These are not risk findings and they are not on the request list.
+          </p>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-navy/80">
+            {report.notApplicable.map((item) => (
+              <li key={item.id}>{item.title}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="mt-8">
         <h3 className="font-heading text-2xl text-navy">Documents to request before closing</h3>
         {report.requests.length === 0 ? (

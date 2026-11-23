@@ -34,9 +34,9 @@ export type GrantBilling = {
   stripeCheckoutSessionId: string | null;
 };
 
-export type SlotChoice = "not-available" | "uploaded";
+export type SlotChoice = "not-available" | "not-applicable" | "uploaded";
 
-export type DocumentStatus = "received" | "not-available" | "missing";
+export type DocumentStatus = "received" | "not-available" | "not-applicable" | "missing";
 
 /** Safe to pass into the browser. No signing payload and no storage keys. */
 export type BuyerSessionView = {

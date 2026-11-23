@@ -4,7 +4,6 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { structuralRowsApply } from "@/lib/buyers/applicability";
 import { loadBuyerSession, sealSpentCookie } from "@/lib/buyers/access";
 import { BUYER_DISCLAIMER, UPLOAD_CONSENT } from "@/lib/buyers/copy";
 import {
@@ -109,18 +108,29 @@ describe("checklist", () => {
     expect(BUYER_DISCLAIMER.toLowerCase()).toContain("checklist and guidance");
   });
 
-  it("hides SIRS and milestone when the building is not 3 stories", () => {
-    const tall = applicableSlots({ stories3: "yes", state: "FL" }).map((slot) => slot.id);
-    const low = applicableSlots({ stories3: "no", state: "FL" }).map((slot) => slot.id);
-    expect(tall).toContain("budget");
-    expect(tall).toContain("actuals");
-    expect(tall).toContain("sirs");
-    expect(tall).toContain("milestone");
-    expect(low).not.toContain("sirs");
-    expect(low).not.toContain("milestone");
-    expect(structuralRowsApply({ stories3: "unsure", state: "FL" })).toBe(true);
-    expect(tall[0]).toBe("budget");
-    expect(tall.indexOf("governing")).toBeGreaterThan(tall.indexOf("milestone"));
+  it("keeps conditional rows on the list and allows Doesn't apply only there", () => {
+    const ids = applicableSlots({ stories3: "no", state: "FL" }).map((slot) => slot.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "budget",
+        "actuals",
+        "reserves",
+        "sirs",
+        "milestone",
+        "governing",
+        "year-end",
+        "minutes",
+        "insurance",
+        "special-assessments",
+        "estoppel",
+        "litigation",
+      ]),
+    );
+    expect(DOCUMENT_SLOTS.find((slot) => slot.id === "sirs")?.allowsNa).toBe(true);
+    expect(DOCUMENT_SLOTS.find((slot) => slot.id === "budget")?.allowsNa).toBe(false);
+    expect(DOCUMENT_SLOTS.find((slot) => slot.id === "sirs")?.detail).toBe(
+      "Required in Florida for condos 3 stories or higher.",
+    );
   });
 
   it("treats a missing document as a finding and a request", () => {
@@ -143,6 +153,39 @@ describe("checklist", () => {
     expect(report.requests.map((item) => item.title)).toContain("Latest reserve study");
     expect(report.requests.map((item) => item.title)).not.toContain("Latest approved budget");
     expect(report.attachedNotes.some((item) => item.id === "budget")).toBe(true);
+    choices.sirs = "not-applicable";
+    choices.milestone = "not-applicable";
+    const neutral = buildBuyerReport({
+      id: "report-na",
+      createdAt: new Date().toISOString(),
+      intake,
+      files: [{ id: "f", slot: "budget", fileName: "budget.pdf", byteSize: 12 }],
+      choices,
+      notes: {},
+      linkKind: "one-time",
+      subscriptionAgent: null,
+      overCap: false,
+      monthlyCap: null,
+    });
+    expect(neutral.findings.some((item) => item.id === "sirs")).toBe(false);
+    expect(neutral.requests.some((item) => item.title.includes("SIRS"))).toBe(false);
+    expect(neutral.notApplicable.map((item) => item.id)).toEqual(
+      expect.arrayContaining(["sirs", "milestone"]),
+    );
+    expect(() =>
+      buildBuyerReport({
+        id: "bad",
+        createdAt: new Date().toISOString(),
+        intake,
+        files: [],
+        choices: { ...choices, budget: "not-applicable" },
+        notes: {},
+        linkKind: "one-time",
+        subscriptionAgent: null,
+        overCap: false,
+        monthlyCap: null,
+      }),
+    ).toThrow(/not applicable/);
     expect(JSON.stringify(report)).not.toContain("%PDF");
     expect(JSON.stringify(report).toLowerCase()).not.toContain("template");
   });
@@ -197,7 +240,14 @@ describe("document checks", () => {
     );
     expect(rows.find((row) => row.slot === "budget")?.status).toBe("received");
     expect(rows.find((row) => row.slot === "estoppel")?.status).toBe("not-available");
-    expect(rows.some((row) => row.slot === "sirs")).toBe(false);
+    expect(rows.some((row) => row.slot === "sirs")).toBe(true);
+    expect(
+      documentRows(
+        { stories3: "no", state: "FL" },
+        [],
+        { sirs: "not-applicable" },
+      ).find((row) => row.slot === "sirs")?.status,
+    ).toBe("not-applicable");
     expect(JSON.stringify(rows)).not.toMatch(/https?:|url/i);
   });
 });

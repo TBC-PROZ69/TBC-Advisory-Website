@@ -1,4 +1,4 @@
-import { storiesLabel, structuralRowsApply } from "@/lib/buyers/applicability";
+import { storiesLabel } from "@/lib/buyers/applicability";
 import { BuyersError } from "@/lib/buyers/errors";
 import { BUYER_DISCLAIMER } from "@/lib/buyers/copy";
 import {
@@ -56,6 +56,7 @@ export type BuyerReport = {
   total: number;
   findings: ReportFinding[];
   requests: { title: string; ask: string }[];
+  notApplicable: { id: string; title: string }[];
   attachedNotes: ReportFinding[];
   documents: ReportDocument[];
 };
@@ -84,19 +85,37 @@ export function buildBuyerReport(input: {
   const rows = documentRows(facts, input.files, input.choices);
   const incomplete = slots.filter((slot) => {
     const row = rows.find((item) => item.slot === slot.id);
-    return !row || (row.status !== "received" && row.status !== "not-available");
+    return (
+      !row ||
+      (row.status !== "received" &&
+        row.status !== "not-available" &&
+        row.status !== "not-applicable")
+    );
   });
   if (incomplete.length > 0) {
     throw new BuyersError(
-      "Every document row must be attached or marked as not in hand.",
+      "Every document row needs a file, I don't have this, or Doesn't apply where that choice is offered.",
       400,
       "checklist",
     );
+  }
+  for (const slot of slots) {
+    if (input.choices[slot.id] === "not-applicable" && !slot.allowsNa) {
+      const hasFile = input.files.some((file) => file.slot === slot.id);
+      if (!hasFile) {
+        throw new BuyersError(
+          "That document cannot be marked as not applicable.",
+          400,
+          "checklist",
+        );
+      }
+    }
   }
 
   const findings: ReportFinding[] = [];
   const attachedNotes: ReportFinding[] = [];
   const requests: { title: string; ask: string }[] = [];
+  const notApplicable: { id: string; title: string }[] = [];
   let highMissing = 0;
 
   for (const slot of slots) {
@@ -115,6 +134,8 @@ export function buildBuyerReport(input: {
         files: [],
       });
       requests.push({ title: slot.title, ask: slot.request });
+    } else if (row.status === "not-applicable") {
+      notApplicable.push({ id: slot.id, title: slot.title });
     } else {
       attachedNotes.push({
         id: slot.id,
@@ -131,8 +152,8 @@ export function buildBuyerReport(input: {
   const band = bandFor(highMissing, findings.length);
   const summary =
     findings.length === 0
-      ? "Every item on this checklist was attached. That is a stronger file, not a conclusion that the association is healthy. The guidance below is what to look for. This check does not read the files."
-      : `${findings.length} of ${slots.length} checklist items were marked as not in hand. Each one is a finding. Ask for those documents before closing.`;
+      ? "Nothing was marked I don't have this. Doesn't apply is not treated as a risk. Attached files still need a person to read them. This check does not read the files."
+      : `${findings.length} of ${slots.length} checklist items were marked I don't have this. Each of those is a finding. Doesn't apply is not.`;
 
   const floridaNote =
     input.intake.state === "FL"
@@ -162,11 +183,12 @@ export function buildBuyerReport(input: {
     overCap: input.overCap,
     monthlyCap: input.monthlyCap,
     overallBand: band,
-    summary: `${summary}${structuralRowsApply(facts) ? "" : " SIRS and milestone rows were left off because the form says no residential building has 3 or more stories."}${floridaNote}`,
+    summary: `${summary}${floridaNote}`,
     addressed: slots.length,
     total: slots.length,
     findings,
     requests,
+    notApplicable,
     attachedNotes,
     documents: rows.map((row) => ({
       ...row,
@@ -178,5 +200,6 @@ export function buildBuyerReport(input: {
 export function documentStatusLabel(status: DocumentStatus) {
   if (status === "received") return "Attached";
   if (status === "not-available") return "I don't have this";
+  if (status === "not-applicable") return "Doesn't apply";
   return "Not addressed";
 }
