@@ -156,7 +156,7 @@ export function buildBuyerReport(input: {
   const band = bandFor(highMissing, findings.length);
   const summary =
     findings.length === 0
-      ? "Nothing was marked I don't have this. Doesn't apply is not treated as a risk. Attached files still need a person to read them. This check does not read the files."
+      ? "Nothing was marked I don't have this. Doesn't apply is not treated as a risk. The written report quotes figures it can read from the attached documents."
       : `${findings.length} of ${slots.length} checklist items were marked I don't have this. Each of those is a finding. Doesn't apply is not.`;
 
   const floridaNote =

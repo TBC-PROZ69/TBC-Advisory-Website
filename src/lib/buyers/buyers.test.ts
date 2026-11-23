@@ -107,7 +107,7 @@ describe("checklist", () => {
       expect(text).not.toMatch(/\u2014|\u2013/);
       expect(text.toLowerCase()).not.toContain("template");
     }
-    expect(BUYER_DISCLAIMER.toLowerCase()).toContain("checklist and guidance");
+    expect(BUYER_DISCLAIMER.toLowerCase()).toContain("checklists and guidance");
   });
 
   it("keeps conditional rows on the list and allows Doesn't apply only there", () => {
@@ -301,7 +301,7 @@ describe("links, reports, and private files", () => {
       consent: false,
     });
     expect(first.report.findings.length).toBeGreaterThan(0);
-    expect(first.report.disclaimer).toContain("checklist and guidance");
+    expect(first.report.disclaimer).toContain("checklists and guidance");
     const session = await loadBuyerSession(token);
     expect(session.ok && session.status).toBe("spent");
     await expect(

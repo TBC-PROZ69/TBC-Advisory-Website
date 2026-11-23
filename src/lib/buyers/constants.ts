@@ -10,6 +10,9 @@ export const AGENT_TOKEN_YEARS = 10;
 export const FILE_TTL_DAYS = 30;
 /** Abandoned uploads are removed after one day. A finished report deletes them immediately. */
 export const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
+/** Vision OCR is only for PDFs with no text layer. Caps keep the cost bounded. */
+export const OCR_PAGES_PER_FILE = 8;
+export const OCR_PAGES_PER_REPORT = 12;
 
 /**
  * Direct uploads go to private Blob storage, not through the function body.

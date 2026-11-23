@@ -12,13 +12,18 @@ import { site } from "@/lib/site";
 
 const BLUE = rgb(0x12 / 255, 0x6b / 255, 0xae / 255);
 const BLACK = rgb(0, 0, 0);
+const WHITE = rgb(1, 1, 1);
+const MUTED_GREEN = rgb(0.36, 0.55, 0.42);
+const MUTED_AMBER = rgb(0.7, 0.52, 0.24);
+const MUTED_RED = rgb(0.62, 0.33, 0.33);
+const ROW_BAND = rgb(0.96, 0.97, 0.98);
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
 const MARGIN = 48;
 const FOOTER_Y = 32;
 
 const PDF_DISCLAIMER =
-  "This Buyers Health Check is checklists and guidance. It is informational only. It is not legal advice, financial advice, an engineering opinion, or an inspection. It is based only on the documents provided and the choices marked on the checklist. TBC Advisory does not read the files.";
+  "This Buyers Health Check is checklists and guidance. It is informational only. It quotes text and figures taken from the documents provided. It is not legal advice, financial advice, an engineering opinion, or an inspection. A scanned page may be unreadable. Confirm anything that matters with the association before closing.";
 
 function winAnsi(value: string) {
   return value
@@ -313,6 +318,87 @@ export async function renderBuyerPdf(report: BuyerReport) {
     y -= 4;
   }
 
+  function ratingColor(rating: string) {
+    if (rating === "Low") return MUTED_GREEN;
+    if (rating === "Moderate" || rating === "Elevated") return MUTED_AMBER;
+    return MUTED_RED;
+  }
+
+  function drawTable(headers: string[], rows: string[][], widths: number[], chipColumn = -1) {
+    const tableWidth = widths.reduce((sum, item) => sum + item, 0);
+    const size = 8;
+    const lineHeight = 11;
+    function rowHeight(cells: string[], header: boolean) {
+      let lines = 1;
+      cells.forEach((cell, index) => {
+        if (!header && index === chipColumn) return;
+        const used = header ? bold : font;
+        lines = Math.max(lines, wrap(cell || " ", used, size, Math.max(12, widths[index] - 8)).length);
+      });
+      return lines * lineHeight + 10;
+    }
+    function paint(cells: string[], header: boolean, zebra: boolean) {
+      const height = rowHeight(cells, header);
+      ensure(height + 2);
+      const bottom = y - height + 10;
+      page.drawRectangle({
+        x: MARGIN,
+        y: bottom,
+        width: tableWidth,
+        height,
+        color: header ? BLUE : zebra ? ROW_BAND : WHITE,
+        borderColor: BLUE,
+        borderWidth: 0.4,
+      });
+      let x = MARGIN;
+      cells.forEach((cell, index) => {
+        if (header) {
+          wrap(cell, bold, size, widths[index] - 8).forEach((line, lineIndex) => {
+            page.drawText(line, {
+              x: x + 4,
+              y: y - lineIndex * lineHeight,
+              size,
+              font: bold,
+              color: WHITE,
+            });
+          });
+        } else if (index === chipColumn) {
+          const label = winAnsi(cell || "");
+          const chipWidth = Math.min(widths[index] - 8, bold.widthOfTextAtSize(label, 8) + 12);
+          page.drawRectangle({
+            x: x + 4,
+            y: bottom + 5,
+            width: Math.max(chipWidth, 42),
+            height: 14,
+            color: ratingColor(cell),
+          });
+          page.drawText(label, {
+            x: x + 8,
+            y: bottom + 8,
+            size: 8,
+            font: bold,
+            color: WHITE,
+          });
+        } else {
+          wrap(cell || "", font, size, widths[index] - 8).forEach((line, lineIndex) => {
+            page.drawText(line, {
+              x: x + 4,
+              y: y - lineIndex * lineHeight,
+              size,
+              font,
+              color: BLACK,
+            });
+          });
+        }
+        x += widths[index];
+      });
+      y = bottom - 1;
+    }
+    paint(headers, true, false);
+    rows.forEach((row, index) => paint(row, false, index % 2 === 1));
+    y -= 8;
+  }
+
   drawHeader();
   page.drawText("Buyers Health Check", { x: MARGIN, y, size: 18, font: bold, color: BLUE });
   y -= 24;
@@ -330,21 +416,33 @@ export async function renderBuyerPdf(report: BuyerReport) {
     paragraph(`${assessment.overallRating}. ${assessment.bottomLine || report.summary}`);
     if (assessment.unavailable) paragraph(assessment.unavailable);
     heading("Scorecard");
-    for (const row of assessment.scorecard) {
-      bullet(`${row.domain}: ${row.rating}`, row.note);
-    }
+    drawTable(
+      ["Domain", "Rating", "Note"],
+      assessment.scorecard.map((row) => [row.domain, row.rating, row.note]),
+      [190, 78, 248],
+      1,
+    );
     heading("Key numbers");
     if (assessment.keyNumbers.length === 0) paragraph("No figure was quoted from a document.");
-    for (const row of assessment.keyNumbers) {
-      bullet(row.label, `${row.value} (${row.source}, ${row.page})`);
-    }
-    heading("What the documents say");
-    if (assessment.findings.length === 0) paragraph("No quoted finding was returned.");
-    for (const row of assessment.findings) {
-      bullet(
-        row.domain,
-        `${row.whatItSays} Citation: ${row.citation} Why it matters: ${row.whyItMatters} Ask: ${row.askBeforeClosing}`,
+    else {
+      drawTable(
+        ["Metric", "Value", "Source"],
+        assessment.keyNumbers.map((row) => [row.label, row.value, `${row.source}, ${row.page}`]),
+        [170, 110, 236],
       );
+    }
+    heading("Findings by domain");
+    if (assessment.findings.length === 0) paragraph("No quoted finding was returned.");
+    for (const domain of DOMAINS) {
+      const items = assessment.findings.filter((row) => row.domain === domain);
+      if (items.length === 0) continue;
+      heading(domain);
+      for (const row of items) {
+        paragraph(row.whatItSays);
+        paragraph(`Citation: ${row.citation}`);
+        paragraph(`Why it matters: ${row.whyItMatters}`);
+        paragraph(`Ask before closing: ${row.askBeforeClosing}`);
+      }
     }
     heading("Red flags");
     if (assessment.redFlags.length === 0) paragraph("None listed.");

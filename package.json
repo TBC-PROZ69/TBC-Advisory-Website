@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@napi-rs/canvas": "^0.1.100",
     "@vercel/blob": "^2.9.0",
     "ai": "^6.0.336",
     "class-variance-authority": "^0.7.1",

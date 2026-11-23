@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { MAX_FILE_BYTES } from "@/lib/buyers/constants";
 import { slotById } from "@/lib/buyers/documents";
+import { blobAuth } from "@/lib/buyers/store";
 import { verifyToken } from "@/lib/buyers/token";
 
 export const runtime = "nodejs";
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
           operations: ["put"],
           maximumSizeInBytes: MAX_FILE_BYTES,
           allowedContentTypes: ALLOWED,
+          ...blobAuth(),
         });
         return {
           token: issued,

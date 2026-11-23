@@ -27,9 +27,15 @@ export function withBuyersLock<T>(task: () => Promise<T>): Promise<T> {
 
 export type StorageMode = "temporary-disk" | "private-blob";
 
+export function buyersBlobStoreId() {
+  return process.env.BUYERS_BLOB_STORE_ID?.trim() || "";
+}
+
 export function blobConfigured() {
   return Boolean(
-    process.env.BLOB_STORE_ID?.trim() || process.env.BLOB_READ_WRITE_TOKEN?.trim(),
+    buyersBlobStoreId() ||
+      process.env.BLOB_STORE_ID?.trim() ||
+      process.env.BLOB_READ_WRITE_TOKEN?.trim(),
   );
 }
 
@@ -44,7 +50,9 @@ export function storageMode(): StorageMode {
 export function storageReady() {
   if (storageMode() === "temporary-disk") return true;
   return Boolean(
-    process.env.BLOB_READ_WRITE_TOKEN?.trim() || process.env.BLOB_STORE_ID?.trim(),
+    process.env.BLOB_READ_WRITE_TOKEN?.trim() ||
+      buyersBlobStoreId() ||
+      process.env.BLOB_STORE_ID?.trim(),
   );
 }
 
@@ -81,9 +89,13 @@ function assertDocKey(key: string) {
   }
 }
 
-function blobAuth() {
+export function blobAuth() {
   const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
-  return token ? { token } : {};
+  const storeId = buyersBlobStoreId();
+  return {
+    ...(token ? { token } : {}),
+    ...(storeId ? { storeId } : {}),
+  };
 }
 
 async function resolveDir() {

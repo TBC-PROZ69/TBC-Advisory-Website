@@ -7,6 +7,8 @@ import {
   MAX_FILE_BYTES,
   MAX_FILES,
   MAX_TOTAL_BYTES,
+  OCR_PAGES_PER_FILE,
+  OCR_PAGES_PER_REPORT,
   ONE_TIME_LINK_DAYS,
   ONE_TIME_PRICE_USD,
 } from "@/lib/buyers/constants";
@@ -16,7 +18,7 @@ import type { FileRecord, GrantRecord, Ledger } from "@/lib/buyers/ledger";
 import { slotById } from "@/lib/buyers/documents";
 import type { DeclaredFile } from "@/lib/buyers/payload";
 import { assessDocuments } from "@/lib/buyers/assessment";
-import { extractDocument } from "@/lib/buyers/extract";
+import { extractDocument, ocrScannedPdf } from "@/lib/buyers/extract";
 import { buildBuyerReport, type BuyerReport } from "@/lib/buyers/report";
 import {
   deletePrivateBytes,
@@ -598,9 +600,20 @@ export async function commitBuyerReport(input: {
         monthlyCap,
       });
       const extracted = [];
+      let ocrBudget = OCR_PAGES_PER_REPORT;
       for (const file of stored) {
-        const bytes = await readPrivateBytes(file.storageKey);
-        extracted.push(await extractDocument(file.fileName, bytes ?? new Uint8Array()));
+        const bytes = (await readPrivateBytes(file.storageKey)) ?? new Uint8Array();
+        let doc = await extractDocument(file.fileName, bytes);
+        if (doc.unread?.includes("scanned without text") && ocrBudget > 0 && bytes.byteLength > 0) {
+          const ocr = await ocrScannedPdf(
+            file.fileName,
+            bytes,
+            Math.min(OCR_PAGES_PER_FILE, ocrBudget),
+          );
+          doc = ocr.doc;
+          ocrBudget -= ocr.pagesSent;
+        }
+        extracted.push(doc);
       }
       report.assessment = await assessDocuments(report, extracted);
       extracted.length = 0;

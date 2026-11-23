@@ -192,8 +192,8 @@ export function BuyersApp({
               <p className="mt-4 rounded-md border border-primary/30 bg-card p-4 text-sm leading-relaxed text-navy/75">
                 This is not legal, financial, engineering, or inspection advice.
                 TBC Advisory is not a property management company. The report
-                records which documents you attached and which you do not have.
-                It does not read the files.
+                quotes what it can read in the documents you attach, records
+                what you do not have, and then deletes the files.
               </p>
               {session.kind === "agent" ? (
                 <p className="mt-4 rounded-md border border-navy/10 bg-card p-4 text-sm text-navy/80">

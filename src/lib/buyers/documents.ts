@@ -31,7 +31,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
       "No latest approved budget was provided. Ask the seller or the association for it before closing. Without the budget, the dues you were quoted are just a number.",
     request: "Ask for the latest approved budget.",
     attached:
-      "The latest approved budget was attached. This check does not read the file. Look for insurance, reserves, and any one-time money holding the dues down.",
+      "The latest approved budget was attached. Look for insurance, reserves, and any one-time money holding the dues down.",
   },
   {
     id: "actuals",
@@ -46,7 +46,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
       "No recent actuals were provided. Ask for the latest balance sheet and income statement before closing. A budget without actuals does not show whether the association is collecting and spending as planned.",
     request: "Ask for the latest balance sheet and income statement.",
     attached:
-      "Recent actuals were attached. This check does not read the file. Compare income and spending with the budget, and note cash and reserve balances.",
+      "Recent actuals were attached. Compare income and spending with the budget, and note cash and reserve balances.",
   },
   {
     id: "reserves",
@@ -60,7 +60,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
       "No reserve study was provided. Ask the seller or the association for it before closing. A missing reserve study is a risk signal: you cannot see whether reserves match the work still ahead.",
     request: "Ask for the latest reserve study.",
     attached:
-      "A reserve study was attached. This check does not read the file. Compare the recommended balance with the cash the association actually holds.",
+      "A reserve study was attached. Compare the recommended balance with the cash the association actually holds.",
   },
   {
     id: "sirs",
@@ -75,7 +75,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     request:
       "Ask for the Structural Integrity Reserve Study, or a written answer that one is not required.",
     attached:
-      "A SIRS was attached. This check does not read the file. Look for a near-term funding gap and any recommended special assessment.",
+      "A SIRS was attached. Look for a near-term funding gap and any recommended special assessment.",
   },
   {
     id: "milestone",
@@ -90,7 +90,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     request:
       "Ask for the milestone inspection report, or a written answer that one is not due yet.",
     attached:
-      "A milestone report was attached. This check does not read the file. Look for substantial deterioration and repairs that are not finished.",
+      "A milestone report was attached. Look for substantial deterioration and repairs that are not finished.",
   },
   {
     id: "governing",
@@ -104,7 +104,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
       "Governing documents were not provided. Ask for the declaration, bylaws, and rules before closing. Those papers are where rental limits, use rules, and assessment powers usually sit.",
     request: "Ask for the declaration, bylaws, and rules and regulations.",
     attached:
-      "Governing documents were attached. This check does not read the file. Read the parts that match how you plan to use the property.",
+      "Governing documents were attached. Read the parts that match how you plan to use the property.",
   },
   {
     id: "year-end",
@@ -118,7 +118,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
       "No year-end financial report or audit was provided. Ask for the latest one. It is the longer record behind the monthly numbers.",
     request: "Ask for the most recent annual or year-end financial report, or the audit.",
     attached:
-      "A year-end report was attached. This check does not read the file. Note any comment on reserves, delinquencies, or litigation.",
+      "A year-end report was attached. Note any comment on reserves, delinquencies, or litigation.",
   },
   {
     id: "minutes",
@@ -132,7 +132,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
       "Recent board minutes were not provided. Ask for the last 6 to 12 months. Minutes are where special assessments, insurance trouble, and repairs usually show up before a listing does.",
     request: "Ask for board minutes for the last 6 to 12 months.",
     attached:
-      "Board minutes were attached. This check does not read the file. Scan for special assessments, insurance, litigation, and unfinished repairs.",
+      "Board minutes were attached. Scan for special assessments, insurance, litigation, and unfinished repairs.",
   },
   {
     id: "insurance",
@@ -148,7 +148,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
     request:
       "Ask for the current insurance declaration pages, including wind and flood if they are separate.",
     attached:
-      "Insurance declaration pages were attached. This check does not read the file. Find the wind and flood deductibles and whether owners can be assessed for them.",
+      "Insurance declaration pages were attached. Find the wind and flood deductibles and whether owners can be assessed for them.",
   },
   {
     id: "special-assessments",
@@ -163,7 +163,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
       "No special assessment history or notices were provided. Ask the association, in writing, whether any special assessment is approved, unpaid, or under discussion, and who must pay it at closing.",
     request: "Ask for special assessment history and any current notices.",
     attached:
-      "Special assessment papers were attached. This check does not read the file. Confirm what is still unpaid for this unit and who pays it at closing.",
+      "Special assessment papers were attached. Confirm what is still unpaid for this unit and who pays it at closing.",
   },
   {
     id: "estoppel",
@@ -178,7 +178,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
       "No estoppel or association questionnaire was provided. Ask the closing agent to order the estoppel. It is the association's own list of what this unit owes, and it expires.",
     request: "Ask for the estoppel certificate and read the date it expires.",
     attached:
-      "An estoppel or questionnaire was attached. This check does not read the file. Read the amounts due, any special assessment, and the expiration date.",
+      "An estoppel or questionnaire was attached. Read the amounts due, any special assessment, and the expiration date.",
   },
   {
     id: "litigation",
@@ -193,7 +193,7 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
       "No pending litigation disclosure was provided. Ask the association, in writing, whether it is in a lawsuit or has a threatened claim, and whether owners can be assessed for it.",
     request: "Ask for a written litigation disclosure, including threatened claims.",
     attached:
-      "A litigation disclosure was attached. This check does not read the file. Note who is involved, what insurance covers, and any deductible owners might pay.",
+      "A litigation disclosure was attached. Note who is involved, what insurance covers, and any deductible owners might pay.",
   },
 ];
 
