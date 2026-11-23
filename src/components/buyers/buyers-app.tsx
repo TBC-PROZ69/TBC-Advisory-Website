@@ -87,11 +87,23 @@ export function BuyersApp({
     setError("");
     try {
       const choices: Record<string, "uploaded" | "not-available" | "not-applicable"> = {};
+      const declared: { slot: string; fileName: string; byteSize: number }[] = [];
       for (const slot of slots) {
-        if ((draft.files[slot.id] ?? []).length > 0) choices[slot.id] = "uploaded";
-        else if (draft.na[slot.id] && slot.allowsNa) choices[slot.id] = "not-applicable";
+        const slotFiles = draft.files[slot.id] ?? [];
+        if (slotFiles.length > 0) {
+          choices[slot.id] = "uploaded";
+          for (const file of slotFiles) {
+            declared.push({
+              slot: slot.id,
+              fileName: file.fileName,
+              byteSize: file.byteSize,
+            });
+          }
+        } else if (draft.na[slot.id] && slot.allowsNa) choices[slot.id] = "not-applicable";
         else if (draft.missing[slot.id]) choices[slot.id] = "not-available";
-        else throw new Error("Every row needs a choice before the report can be prepared.");
+        else {
+          throw new Error(`1 document still needs an answer: ${slot.title}.`);
+        }
       }
       const response = await fetch("/api/buyers/report", {
         method: "POST",
@@ -101,6 +113,7 @@ export function BuyersApp({
           intake: draft.intake,
           notes: draft.notes,
           choices,
+          files: declared,
           consent: draft.consent,
         }),
       });
@@ -149,6 +162,7 @@ export function BuyersApp({
         <div id="buyers-step">
           {report && (draft.step === "results" || session.status === "spent") ? (
             <ReportView
+              token={token}
               report={report}
               emailed={stored?.emailed ?? null}
               linkStatus={stored?.linkStatus ?? null}
@@ -255,6 +269,7 @@ export function BuyersApp({
                           [slot]: [...(current.files[slot] ?? []), file],
                         },
                         missing: { ...current.missing, [slot]: false },
+                        na: { ...current.na, [slot]: false },
                       }))
                     }
                     onFileRemoved={(slot, fileId) =>

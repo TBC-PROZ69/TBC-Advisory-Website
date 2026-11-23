@@ -378,7 +378,9 @@ export function documentRows(
     const slotFiles = files.filter((file) => file.slot === slot.id);
     const choice = choices[slot.id] ?? "";
     let status: DocumentStatus = "missing";
-    if (slotFiles.length > 0) status = "received";
+    // "uploaded" is an answer even when this server instance no longer has the
+    // bytes. Preview storage is temporary disk and is not shared across instances.
+    if (slotFiles.length > 0 || choice === "uploaded") status = "received";
     else if (choice === "not-applicable") status = "not-applicable";
     else if (choice === "not-available") status = "not-available";
     return {

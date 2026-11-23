@@ -1,22 +1,61 @@
 "use client";
 
+import { useState } from "react";
+
 import { Wordmark } from "@/components/wordmark";
 import { BAND_META } from "@/lib/buyers/copy";
 import { documentStatusLabel, type BuyerReport } from "@/lib/buyers/report";
 import { site } from "@/lib/site";
 
 export function ReportView({
+  token,
   report,
   emailed,
   linkStatus,
   onAnother,
 }: {
+  token: string;
   report: BuyerReport;
   emailed: boolean | null;
   linkStatus: "active" | "spent" | null;
   onAnother?: () => void;
 }) {
+  const [pdfError, setPdfError] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
   const overall = BAND_META[report.overallBand];
+
+  async function downloadPdf() {
+    setPdfBusy(true);
+    setPdfError("");
+    try {
+      const response = await fetch("/api/buyers/report/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ t: token, report }),
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error || "The PDF could not be prepared.");
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const named = /filename="([^"]+)"/.exec(disposition)?.[1];
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = named || "TBC-Buyers-Health-Check.pdf";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setPdfError(
+        downloadError instanceof Error ? downloadError.message : "The PDF could not be prepared.",
+      );
+    } finally {
+      setPdfBusy(false);
+    }
+  }
   const prepared = new Date(report.createdAt).toLocaleString("en-US", {
     timeZone: "America/New_York",
     dateStyle: "long",
@@ -175,8 +214,8 @@ export function ReportView({
       <p className="mt-8 text-sm leading-relaxed text-navy/75">{report.disclaimer}</p>
       <p className="mt-3 text-sm text-navy/60">
         {emailed
-          ? "A copy of this summary was sent to TBC Advisory. Save a PDF from the print dialog for your own file."
-          : `A copy was not emailed from this deployment. Use the print dialog to save a PDF, and contact ${site.email} if you need TBC to keep one.`}
+          ? "A copy of this summary was sent to TBC Advisory. Download the PDF for your own file."
+          : `A copy was not emailed from this deployment. Download the PDF for your own file, and contact ${site.email} if you need TBC to keep one.`}
       </p>
       {linkStatus === "spent" ? (
         <p className="mt-3 text-sm text-navy/70">
@@ -187,11 +226,17 @@ export function ReportView({
       <div className="print-hidden mt-6 flex flex-wrap gap-3">
         <button
           type="button"
-          className="h-11 rounded-md bg-primary px-4 text-sm text-white"
-          onClick={() => window.print()}
+          className="h-11 rounded-md bg-primary px-4 text-sm text-white disabled:opacity-60"
+          disabled={pdfBusy}
+          onClick={() => void downloadPdf()}
         >
-          Print or save as PDF
+          {pdfBusy ? "Preparing the PDF…" : "Download PDF report"}
         </button>
+        {pdfError ? (
+          <p role="alert" className="basis-full text-sm text-[#9b2c2c]">
+            {pdfError}
+          </p>
+        ) : null}
         {onAnother ? (
           <button
             type="button"

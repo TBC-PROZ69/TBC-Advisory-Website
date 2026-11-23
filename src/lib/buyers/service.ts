@@ -12,6 +12,7 @@ import { BuyersError } from "@/lib/buyers/errors";
 import { looksLikeEmail } from "@/lib/buyers/intake";
 import type { FileRecord, GrantRecord, Ledger } from "@/lib/buyers/ledger";
 import { slotById } from "@/lib/buyers/documents";
+import type { DeclaredFile } from "@/lib/buyers/payload";
 import { buildBuyerReport, type BuyerReport } from "@/lib/buyers/report";
 import {
   deletePrivateBytes,
@@ -80,6 +81,23 @@ function publicFiles(files: FileRecord[]) {
     fileName: file.fileName,
     byteSize: file.byteSize,
   }));
+}
+
+function filesForReport(
+  serverFiles: ReturnType<typeof publicFiles>,
+  declared: DeclaredFile[],
+  choices: Record<string, SlotChoice | "">,
+) {
+  const slotsOnServer = new Set(serverFiles.map((file) => file.slot));
+  const remembered = declared
+    .filter((file) => choices[file.slot] === "uploaded" && !slotsOnServer.has(file.slot))
+    .map((file, index) => ({
+      id: `declared-${index}`,
+      slot: file.slot,
+      fileName: file.fileName,
+      byteSize: file.byteSize,
+    }));
+  return [...serverFiles, ...remembered];
 }
 
 function countMonth(ledger: Ledger, grantId: string, key = monthKey()) {
@@ -439,6 +457,7 @@ export async function commitBuyerReport(input: {
   choices: Record<string, SlotChoice | "">;
   consent: boolean;
   spentIds?: string[];
+  declaredFiles?: DeclaredFile[];
 }) {
   return withBuyersLock(async () => {
     if (
@@ -471,7 +490,8 @@ export async function commitBuyerReport(input: {
         grant.status === "spent" ? "spent" : "expired",
       );
     }
-    const files = ledger.files.filter((file) => file.grantId === grant.id);
+    const stored = ledger.files.filter((file) => file.grantId === grant.id);
+    const files = filesForReport(publicFiles(stored), input.declaredFiles ?? [], input.choices);
     if (files.length > 0 && !input.consent) {
       throw new BuyersError(
         "Confirm the consent line before a report can list uploaded files.",
@@ -488,7 +508,7 @@ export async function commitBuyerReport(input: {
       createdAt: now.toISOString(),
       intake: input.intake,
       notes: input.notes,
-      files: publicFiles(files),
+      files,
       choices: input.choices,
       linkKind: grant.kind,
       subscriptionAgent:
@@ -511,7 +531,7 @@ export async function commitBuyerReport(input: {
       grant.status = "spent";
       grant.spentAt = now.toISOString();
     }
-    const keys = files.map((file) => file.storageKey);
+    const keys = stored.map((file) => file.storageKey);
     ledger.files = ledger.files.filter((file) => file.grantId !== grant.id);
     await writeLedger(ledger);
     for (const key of keys) {

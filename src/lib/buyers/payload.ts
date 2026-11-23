@@ -1,8 +1,14 @@
 import { BuyersError } from "@/lib/buyers/errors";
 import { intakeIssues, toIntake, type IntakeDraft } from "@/lib/buyers/intake";
-import { isSlotChoice, isSlotId } from "@/lib/buyers/documents";
-import { MAX_NOTE_CHARS } from "@/lib/buyers/constants";
+import { isSlotChoice, isSlotId, safeFileName } from "@/lib/buyers/documents";
+import { MAX_FILE_BYTES, MAX_FILES, MAX_NOTE_CHARS } from "@/lib/buyers/constants";
 import type { SlotChoice } from "@/lib/buyers/types";
+
+export type DeclaredFile = {
+  slot: string;
+  fileName: string;
+  byteSize: number;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -47,6 +53,41 @@ export function parseChoices(value: unknown) {
     choices[id] = choice;
   }
   return choices;
+}
+
+export function parseDeclaredFiles(value: unknown): DeclaredFile[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new BuyersError("Attached file list is not valid.", 400, "documents");
+  }
+  if (value.length > MAX_FILES) {
+    throw new BuyersError("This packet already has the maximum number of files.", 400, "documents");
+  }
+  const files: DeclaredFile[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) {
+      throw new BuyersError("Attached file list is not valid.", 400, "documents");
+    }
+    const slot = text(item, "slot");
+    if (!isSlotId(slot)) {
+      throw new BuyersError("That document slot is not recognized.", 400, "documents");
+    }
+    const byteSize = item.byteSize;
+    if (
+      typeof byteSize !== "number" ||
+      !Number.isFinite(byteSize) ||
+      byteSize < 1 ||
+      byteSize > MAX_FILE_BYTES
+    ) {
+      throw new BuyersError("An attached file size is not valid.", 400, "documents");
+    }
+    files.push({
+      slot,
+      fileName: safeFileName(text(item, "fileName")),
+      byteSize: Math.round(byteSize),
+    });
+  }
+  return files;
 }
 
 export function parseNotes(value: unknown) {

@@ -9,7 +9,12 @@ import {
 } from "@/lib/buyers/access";
 import { sendBuyerReport } from "@/lib/buyers/email";
 import { BuyersError } from "@/lib/buyers/errors";
-import { parseChoices, parseCompletedIntake, parseNotes } from "@/lib/buyers/payload";
+import {
+  parseChoices,
+  parseCompletedIntake,
+  parseDeclaredFiles,
+  parseNotes,
+} from "@/lib/buyers/payload";
 import {
   commitBuyerReport,
   latestReport,
@@ -86,6 +91,7 @@ export async function POST(request: NextRequest) {
     const intake = parseCompletedIntake(body.intake);
     const choices = parseChoices(body.choices);
     const notes = parseNotes(body.notes);
+    const declaredFiles = parseDeclaredFiles(body.files);
     const consent = body.consent === true;
     const { report, kind } = await commitBuyerReport({
       payload: session.payload,
@@ -94,6 +100,7 @@ export async function POST(request: NextRequest) {
       choices,
       consent,
       spentIds: spentIdsFromCookie(cookie),
+      declaredFiles,
     });
     const emailed = await sendBuyerReport(report);
     if (emailed) await markReportEmailed(report.id);

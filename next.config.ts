@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     "/insights": ["./content/insights/**/*"],
     "/insights/*": ["./content/insights/**/*"],
     "/sitemap.xml": ["./content/insights/**/*"],
+    "/api/buyers/report/pdf": ["./public/brand/tbc-advisory-logo-lockup.png"],
   },
   async headers() {
     return [

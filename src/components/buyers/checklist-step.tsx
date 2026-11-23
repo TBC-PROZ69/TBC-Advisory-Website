@@ -49,13 +49,38 @@ export function ChecklistStep({
 }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState("");
+  const [showMissing, setShowMissing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const slotRef = useRef("");
   const allFiles = Object.values(files).flat();
-  const addressed = slots.filter(
-    (slot) => (files[slot.id] ?? []).length > 0 || missing[slot.id] || na[slot.id],
-  ).length;
+  function rowAnswered(slot: DocumentSlot) {
+    return (
+      (files[slot.id] ?? []).length > 0 ||
+      Boolean(missing[slot.id]) ||
+      (Boolean(na[slot.id]) && slot.allowsNa)
+    );
+  }
+  const addressed = slots.filter((slot) => rowAnswered(slot)).length;
   const ready = addressed === slots.length && !pending;
+
+  function submitOrHighlight() {
+    const missingRows = slots.filter((slot) => !rowAnswered(slot));
+    if (missingRows.length === 0) {
+      setShowMissing(false);
+      setError("");
+      onSubmit();
+      return;
+    }
+    setShowMissing(true);
+    const count = missingRows.length;
+    const names = missingRows.map((slot) => slot.title).join(", ");
+    setError(
+      `${count} ${count === 1 ? "document still needs" : "documents still need"} an answer: ${names}.`,
+    );
+    const first = document.getElementById(`buyers-row-${missingRows[0]?.id}`);
+    first?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (first instanceof HTMLElement) first.focus();
+  }
 
   async function send(slot: DocumentSlot, file: File) {
     setError("");
@@ -177,9 +202,17 @@ export function ChecklistStep({
           const slotFiles = files[slot.id] ?? [];
           const markedMissing = Boolean(missing[slot.id]) && slotFiles.length === 0;
           const markedNa = Boolean(na[slot.id]) && slotFiles.length === 0 && !markedMissing;
-          const done = slotFiles.length > 0 || markedMissing || markedNa;
+          const done = rowAnswered(slot);
+          const needsChoice = showMissing && !done;
           return (
-            <li key={slot.id} className="rounded-md border border-navy/10 bg-card p-4">
+            <li
+              key={slot.id}
+              id={`buyers-row-${slot.id}`}
+              tabIndex={-1}
+              className={`rounded-md border bg-card p-4 outline-none ${
+                needsChoice ? "border-[#9b2c2c] ring-1 ring-[#9b2c2c]" : "border-navy/10"
+              }`}
+            >
               <p className="text-xs text-navy/45">
                 {index + 1} of {slots.length}
                 {done ? " · Addressed" : ""}
@@ -251,6 +284,9 @@ export function ChecklistStep({
                   </label>
                 ) : null}
               </div>
+              {needsChoice ? (
+                <p className="mt-3 text-sm text-[#9b2c2c]">Choose one option</p>
+              ) : null}
               <details className="mt-3">
                 <summary className="cursor-pointer text-sm text-navy/60">Add a note</summary>
                 <label className="mt-2 block text-xs text-navy/55">
@@ -269,11 +305,11 @@ export function ChecklistStep({
       </ol>
 
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-[#9b2c2c]">
           {error}
         </p>
       ) : null}
-      {!ready ? (
+      {!ready && !error ? (
         <p className="text-sm text-navy/60">
           Choose Attach file, I don&apos;t have this, or Doesn&apos;t apply where it
           is offered, on every row.
@@ -284,7 +320,7 @@ export function ChecklistStep({
         <WizardButton variant="outline" onPress={onBack} disabled={busy || Boolean(pending)}>
           Back
         </WizardButton>
-        <WizardButton onPress={onSubmit} disabled={!ready || busy}>
+        <WizardButton onPress={submitOrHighlight} disabled={busy || Boolean(pending)}>
           {busy ? "Preparing the report…" : "See my report"}
         </WizardButton>
       </div>

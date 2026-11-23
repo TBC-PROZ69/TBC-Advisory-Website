@@ -14,6 +14,7 @@ import {
 } from "@/lib/buyers/documents";
 import { BuyersError } from "@/lib/buyers/errors";
 import { toIntake, type IntakeDraft } from "@/lib/buyers/intake";
+import { buyersPdfFilename, parseReportForPdf, renderBuyerPdf } from "@/lib/buyers/pdf";
 import { buildBuyerReport } from "@/lib/buyers/report";
 import {
   addBuyerDocument,
@@ -205,7 +206,33 @@ describe("checklist", () => {
         overCap: false,
         monthlyCap: null,
       }),
-    ).toThrow(BuyersError);
+    ).toThrow(/12 documents still need an answer: Latest approved budget/);
+  });
+
+  it("treats an uploaded choice as answered when this instance has no file bytes", () => {
+    const { intake, choices } = allMissing("no");
+    choices.budget = "uploaded";
+    choices.sirs = "not-applicable";
+    choices.milestone = "not-applicable";
+    const report = buildBuyerReport({
+      id: "uploaded-without-bytes",
+      createdAt: "2026-11-23T18:00:00.000Z",
+      intake,
+      files: [{ id: "named", slot: "budget", fileName: "budget.pdf", byteSize: 1200 }],
+      choices,
+      notes: {},
+      linkKind: "one-time",
+      subscriptionAgent: null,
+      overCap: false,
+      monthlyCap: null,
+    });
+    expect(report.findings.some((item) => item.id === "budget")).toBe(false);
+    expect(report.notApplicable.map((item) => item.id)).toEqual(
+      expect.arrayContaining(["sirs", "milestone"]),
+    );
+    expect(report.attachedNotes.find((item) => item.id === "budget")?.files).toEqual([
+      "budget.pdf",
+    ]);
   });
 });
 
@@ -245,9 +272,16 @@ describe("document checks", () => {
       documentRows(
         { stories3: "no", state: "FL" },
         [],
-        { sirs: "not-applicable" },
+        { sirs: "not-applicable", budget: "uploaded" },
       ).find((row) => row.slot === "sirs")?.status,
     ).toBe("not-applicable");
+    expect(
+      documentRows(
+        { stories3: "no", state: "FL" },
+        [],
+        { budget: "uploaded" },
+      ).find((row) => row.slot === "budget")?.status,
+    ).toBe("received");
     expect(JSON.stringify(rows)).not.toMatch(/https?:|url/i);
   });
 });
@@ -381,6 +415,63 @@ describe("links, reports, and private files", () => {
     );
     expect(done.report.findings.some((item) => item.id === "estoppel")).toBe(false);
     await expect(stat(path.join(dir, key))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("keeps an answered upload when the file bytes are not on this instance", async () => {
+    const once = await createOneTimeGrant("Other instance");
+    const payload = verifyToken(tokenFrom(once.href));
+    const { intake, choices } = allMissing("no");
+    choices.budget = "uploaded";
+    choices.actuals = "uploaded";
+    choices.sirs = "not-applicable";
+    choices.milestone = "not-applicable";
+    const done = await commitBuyerReport({
+      payload: payload!,
+      intake,
+      notes: {},
+      choices,
+      consent: true,
+      declaredFiles: [
+        { slot: "budget", fileName: "budget.pdf", byteSize: 100 },
+        { slot: "budget", fileName: "notes.pdf", byteSize: 80 },
+        { slot: "actuals", fileName: "actuals.xlsx", byteSize: 90 },
+      ],
+    });
+    expect(done.report.attachedNotes.find((item) => item.id === "budget")?.files).toEqual([
+      "budget.pdf",
+      "notes.pdf",
+    ]);
+    expect(done.report.notApplicable.map((item) => item.id)).toEqual(
+      expect.arrayContaining(["sirs", "milestone"]),
+    );
+    expect(done.report.findings.some((item) => item.id === "budget")).toBe(false);
+  });
+});
+
+describe("buyer pdf", () => {
+  it("builds a branded PDF from the report already on the page", async () => {
+    const { intake, choices } = allMissing("no");
+    choices.budget = "uploaded";
+    choices.sirs = "not-applicable";
+    choices.milestone = "not-applicable";
+    const report = buildBuyerReport({
+      id: "pdf-report",
+      createdAt: "2026-11-23T18:00:00.000Z",
+      intake,
+      files: [{ id: "f", slot: "budget", fileName: "budget.pdf", byteSize: 100 }],
+      choices,
+      notes: {},
+      linkKind: "one-time",
+      subscriptionAgent: null,
+      overCap: false,
+      monthlyCap: null,
+    });
+    const filename = buyersPdfFilename(report.associationName, report.createdAt);
+    expect(filename).toBe("TBC-Buyers-Health-Check_Palm-Sample-Condominium_2026-11-23.pdf");
+    const bytes = await renderBuyerPdf(parseReportForPdf(report));
+    expect(Buffer.from(bytes).subarray(0, 5).toString()).toBe("%PDF-");
+    expect(report.disclaimer.toLowerCase()).not.toContain("template");
+    expect(report.disclaimer).not.toContain("\u2014");
   });
 });
 

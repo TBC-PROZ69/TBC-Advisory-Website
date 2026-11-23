@@ -93,8 +93,10 @@ export function buildBuyerReport(input: {
     );
   });
   if (incomplete.length > 0) {
+    const names = incomplete.map((slot) => slot.title);
+    const count = names.length;
     throw new BuyersError(
-      "Every document row needs a file, I don't have this, or Doesn't apply where that choice is offered.",
+      `${count} ${count === 1 ? "document still needs" : "documents still need"} an answer: ${names.join(", ")}.`,
       400,
       "checklist",
     );
