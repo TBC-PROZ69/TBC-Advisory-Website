@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { uploadPresigned } from "@vercel/blob/client";
 
 import { WizardButton } from "@/components/buyers/wizard-button";
 import type { StoredFile } from "@/components/buyers/storage";
@@ -8,12 +9,14 @@ import { MAX_FILE_BYTES } from "@/lib/buyers/constants";
 import { UPLOAD_CONSENT } from "@/lib/buyers/copy";
 import {
   inspectUpload,
+  safeFileName,
   totalsWithinLimits,
   type DocumentSlot,
 } from "@/lib/buyers/documents";
 
 export function ChecklistStep({
   token,
+  grantId,
   slots,
   consent,
   missing,
@@ -31,6 +34,7 @@ export function ChecklistStep({
   busy,
 }: {
   token: string;
+  grantId: string;
   slots: DocumentSlot[];
   consent: boolean;
   missing: Record<string, boolean>;
@@ -49,6 +53,7 @@ export function ChecklistStep({
 }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState("");
+  const [progress, setProgress] = useState<{ name: string; percent: number } | null>(null);
   const [showMissing, setShowMissing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const slotRef = useRef("");
@@ -89,33 +94,52 @@ export function ChecklistStep({
       return;
     }
     if (file.size > MAX_FILE_BYTES) {
-      setError("Each file must be 4 MB or smaller.");
+      setError(`${file.name} could not be uploaded. Each file must be 50 MB or smaller.`);
       return;
     }
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const inspected = inspectUpload(file.name, file.type, bytes);
+    const head = new Uint8Array(await file.slice(0, 256 * 1024).arrayBuffer());
+    const inspected = inspectUpload(file.name, file.type || "application/octet-stream", head);
     if (!inspected.ok) {
-      setError(inspected.error);
+      setError(`${file.name} could not be uploaded. ${inspected.error}`);
       return;
     }
     const limit = totalsWithinLimits(allFiles, file.size);
     if (limit) {
-      setError(limit);
+      setError(`${file.name} could not be uploaded. ${limit}`);
       return;
     }
-    const form = new FormData();
-    form.set("t", token);
-    form.set("slot", slot.id);
-    form.set("action", "upload");
-    form.set("consent", "yes");
-    form.set("file", file);
+    const pathname = `buyers/docs/${grantId}/${crypto.randomUUID()}-${inspected.fileName || safeFileName(file.name)}`;
     setPending(slot.id);
+    setProgress({ name: file.name, percent: 0 });
     try {
-      const response = await fetch("/api/buyers/documents", { method: "POST", body: form });
+      const blob = await uploadPresigned(pathname, file, {
+        access: "private",
+        handleUploadUrl: "/api/buyers/blob",
+        clientPayload: JSON.stringify({ t: token, slot: slot.id }),
+        multipart: file.size >= 5 * 1024 * 1024,
+        contentType: inspected.contentType,
+        onUploadProgress: ({ percentage }) => {
+          setProgress({ name: file.name, percent: Math.round(percentage) });
+        },
+      });
+      const response = await fetch("/api/buyers/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          t: token,
+          action: "register",
+          slot: slot.id,
+          fileName: inspected.fileName,
+          contentType: inspected.contentType,
+          byteSize: file.size,
+          pathname: blob.pathname,
+          consent: true,
+        }),
+      });
       const data = (await response.json().catch(() => null)) as
-        | { error?: string; file?: StoredFile & { slot: string } }
+        | { error?: string; file?: StoredFile }
         | null;
-      if (!response.ok || !data?.file || "url" in data.file) {
+      if (!response.ok || !data?.file || "url" in (data.file ?? {})) {
         throw new Error(data?.error || "The file could not be stored.");
       }
       onFileAdded(slot.id, {
@@ -126,9 +150,12 @@ export function ChecklistStep({
       onMissing(slot.id, false);
       onNa(slot.id, false);
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "The file could not be stored.");
+      const reason =
+        uploadError instanceof Error ? uploadError.message : "The file could not be stored.";
+      setError(`${file.name} could not be uploaded. ${reason}`);
     } finally {
       setPending("");
+      setProgress(null);
     }
   }
 
@@ -219,6 +246,16 @@ export function ChecklistStep({
               </p>
               <h3 className="font-heading mt-1 text-lg text-navy">{slot.title}</h3>
               <p className="mt-1 text-sm leading-relaxed text-navy/65">{slot.detail}</p>
+              {pending === slot.id && progress ? (
+                <div className="mt-3">
+                  <div className="h-2 overflow-hidden rounded-full bg-navy/10">
+                    <div className="h-full bg-primary" style={{ width: `${progress.percent}%` }} />
+                  </div>
+                  <p className="mt-1 text-xs text-navy/60">
+                    {progress.name}: {progress.percent}%
+                  </p>
+                </div>
+              ) : null}
               {slotFiles.length > 0 ? (
                 <ul className="mt-3 space-y-2 text-sm">
                   {slotFiles.map((file) => (

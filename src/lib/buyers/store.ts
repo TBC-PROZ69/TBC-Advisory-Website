@@ -1,7 +1,6 @@
-import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { FILE_TTL_DAYS } from "@/lib/buyers/constants";
 import { BuyersError } from "@/lib/buyers/errors";
 import { emptyLedger, type Ledger } from "@/lib/buyers/ledger";
 
@@ -28,10 +27,18 @@ export function withBuyersLock<T>(task: () => Promise<T>): Promise<T> {
 
 export type StorageMode = "temporary-disk" | "private-blob";
 
+export function blobConfigured() {
+  return Boolean(
+    process.env.BLOB_STORE_ID?.trim() || process.env.BLOB_READ_WRITE_TOKEN?.trim(),
+  );
+}
+
 export function storageMode(): StorageMode {
-  return process.env.BUYERS_STORAGE?.trim() === "blob"
-    ? "private-blob"
-    : "temporary-disk";
+  if (process.env.BUYERS_STORAGE?.trim() === "disk") return "temporary-disk";
+  if (process.env.BUYERS_STORAGE?.trim() === "blob" || blobConfigured()) {
+    return "private-blob";
+  }
+  return "temporary-disk";
 }
 
 export function storageReady() {
@@ -64,7 +71,12 @@ function assertStorageReady() {
 }
 
 function assertDocKey(key: string) {
-  if (!/^buyers\/docs\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(key)) {
+  if (
+    !key.startsWith("buyers/docs/") ||
+    key.includes("..") ||
+    key.includes("\\") ||
+    key.includes("//")
+  ) {
     throw new BuyersError("Storage key rejected.", 500);
   }
 }
@@ -208,7 +220,7 @@ export async function putPrivateBytes(
       addRandomSuffix: false,
       allowOverwrite: false,
       cacheControlMaxAge: 60,
-      ttlDays: FILE_TTL_DAYS,
+      ttlDays: 1,
       ...blobAuth(),
     });
     if (saved.pathname.includes("://") || saved.pathname !== key) {
@@ -225,6 +237,26 @@ export async function putPrivateBytes(
   await writeFile(full, bytes, { mode: 0o600 });
 }
 
+export async function readPrivateBytes(key: string): Promise<Uint8Array | null> {
+  assertDocKey(key);
+  try {
+    if (storageMode() === "private-blob") {
+      const { get } = await import("@vercel/blob");
+      const result = await get(key, { access: "private", useCache: false, ...blobAuth() });
+      if (!result || result.statusCode !== 200 || !result.stream) return null;
+      return new Uint8Array(await new Response(result.stream).arrayBuffer());
+    }
+    const dir = await resolveDir();
+    return new Uint8Array(await readFile(diskPath(dir, key)));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    const name = error instanceof Error ? error.name : "";
+    if (code === "ENOENT" || name === "BlobNotFoundError") return null;
+    logSafe(error);
+    return null;
+  }
+}
+
 export async function deletePrivateBytes(key: string) {
   assertDocKey(key);
   try {
@@ -234,7 +266,9 @@ export async function deletePrivateBytes(key: string) {
       return;
     }
     const dir = await resolveDir();
-    await unlink(diskPath(dir, key));
+    const full = diskPath(dir, key);
+    await unlink(full);
+    await rmdir(path.dirname(full)).catch(() => undefined);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     const name = error instanceof Error ? error.name : "";

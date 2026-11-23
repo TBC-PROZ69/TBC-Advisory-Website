@@ -233,6 +233,7 @@ export function BuyersApp({
                 <>
                   <ChecklistStep
                     token={token}
+                    grantId={session.grantId}
                     slots={slots}
                     consent={draft.consent}
                     missing={draft.missing}
@@ -284,8 +285,13 @@ export function BuyersApp({
                     onBack={() => update((current) => ({ ...current, step: "intake" }))}
                     onSubmit={() => void submitReport()}
                   />
+                  {busy ? (
+                    <p role="status" className="mt-4 text-sm text-navy">
+                      Analyzing your documents
+                    </p>
+                  ) : null}
                   {error ? (
-                    <p role="alert" className="mt-4 text-sm text-destructive">
+                    <p role="alert" className="mt-4 text-sm text-[#9b2c2c]">
                       {error}
                     </p>
                   ) : null}

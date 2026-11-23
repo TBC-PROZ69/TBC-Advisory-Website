@@ -34,7 +34,19 @@ export function IntakeForm({
 
   function continueIfValid() {
     setAttempted(true);
-    if (Object.keys(intakeIssues(value)).length > 0) return;
+    const next = intakeIssues(value);
+    const first = (
+      [
+        ["name", "person-name"],
+        ["email", "person-email"],
+        ["associationName", "association-name"],
+      ] as const
+    ).find(([key]) => next[key]);
+    if (first) {
+      document.getElementById(first[1])?.focus();
+      return;
+    }
+    if (Object.keys(next).length > 0) return;
     onContinue();
   }
 
@@ -78,7 +90,11 @@ export function IntakeForm({
       </fieldset>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Your name" htmlFor="person-name" error={attempted ? issues.name : ""}>
+        <Field
+          label="Your Name (First, Last)"
+          htmlFor="person-name"
+          error={attempted ? issues.name : ""}
+        >
           <Input
             id="person-name"
             className={fieldClass}
@@ -100,7 +116,7 @@ export function IntakeForm({
       </div>
 
       <Field
-        label="Association or property name"
+        label="Association / Property Name"
         htmlFor="association-name"
         error={attempted ? issues.associationName : ""}
       >
@@ -205,8 +221,12 @@ function Field({
       <Label htmlFor={htmlFor} className="text-sm font-medium text-navy">
         {label}
       </Label>
-      {children}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <div className={error ? "rounded-md ring-1 ring-[#9b2c2c]" : undefined}>{children}</div>
+      {error ? (
+        <p id={`${htmlFor}-error`} className="text-sm text-[#9b2c2c]">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

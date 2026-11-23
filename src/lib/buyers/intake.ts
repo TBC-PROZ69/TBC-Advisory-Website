@@ -105,9 +105,14 @@ export function intakeIssues(draft: IntakeDraft) {
   if (draft.completer !== "buyer" && draft.completer !== "agent") {
     issues.completer = "Select buyer or agent.";
   }
-  if (!clean(draft.name, MAX_NAME_CHARS)) issues.name = "Required.";
-  if (!looksLikeEmail(draft.email.trim())) issues.email = "Enter a valid email.";
-  if (!clean(draft.associationName, 160)) issues.associationName = "Required.";
+  if (!clean(draft.name, MAX_NAME_CHARS)) {
+    issues.name = "Enter your first and last name.";
+  }
+  if (!draft.email.trim()) issues.email = "Enter an email address.";
+  else if (!looksLikeEmail(draft.email.trim())) issues.email = "Enter a valid email.";
+  if (!clean(draft.associationName, 160)) {
+    issues.associationName = "Enter the association or property name.";
+  }
   if (draft.unitAddress.trim().length > 160) {
     issues.unitAddress = "Use 160 characters or fewer.";
   }

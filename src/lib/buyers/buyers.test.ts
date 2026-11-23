@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -14,6 +14,7 @@ import {
 } from "@/lib/buyers/documents";
 import { BuyersError } from "@/lib/buyers/errors";
 import { toIntake, type IntakeDraft } from "@/lib/buyers/intake";
+import { checklistAssessment } from "@/lib/buyers/assessment";
 import { buyersPdfFilename, parseReportForPdf, renderBuyerPdf } from "@/lib/buyers/pdf";
 import { buildBuyerReport } from "@/lib/buyers/report";
 import {
@@ -415,6 +416,52 @@ describe("links, reports, and private files", () => {
     );
     expect(done.report.findings.some((item) => item.id === "estoppel")).toBe(false);
     await expect(stat(path.join(dir, key))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await listGrantFiles(payload.id)).toEqual([]);
+  });
+
+  it("deletes the file when the report fails, and drops abandoned uploads after 24 hours", async () => {
+    const once = await createOneTimeGrant("Cleanup");
+    const payload = verifyToken(tokenFrom(once.href));
+    const pdf = new TextEncoder().encode("%PDF-1.4\nReserve balance $10\n%%EOF");
+    const saved = await addBuyerDocument({
+      grantId: payload!.id,
+      slot: "reserves",
+      fileName: "reserves.pdf",
+      contentType: "application/pdf",
+      bytes: pdf,
+      consent: true,
+    });
+    await expect(
+      commitBuyerReport({
+        payload: payload!,
+        intake: toIntake(draft()),
+        notes: {},
+        choices: {},
+        consent: true,
+      }),
+    ).rejects.toThrow(/documents still need an answer/);
+    expect(await listGrantFiles(payload!.id)).toEqual([]);
+    await expect(stat(path.join(dir, "buyers/docs", payload!.id, saved.id))).rejects.toBeTruthy();
+
+    const kept = await addBuyerDocument({
+      grantId: payload!.id,
+      slot: "budget",
+      fileName: "budget.pdf",
+      contentType: "application/pdf",
+      bytes: pdf,
+      consent: true,
+    });
+    await sweepStoredFiles(new Date(Date.now() + 25 * 60 * 60 * 1000));
+    expect(await listGrantFiles(payload!.id)).toEqual([]);
+    const docs = path.join(dir, "buyers", "docs");
+    const left = await readdir(docs, { recursive: true }).catch(() => [] as string[]);
+    const filesLeft: string[] = [];
+    for (const name of left) {
+      const info = await stat(path.join(docs, String(name)));
+      if (info.isFile()) filesLeft.push(String(name));
+    }
+    expect(filesLeft).toEqual([]);
+    expect(kept.id).toBeTruthy();
   });
 
   it("keeps an answered upload when the file bytes are not on this instance", async () => {
@@ -468,6 +515,9 @@ describe("buyer pdf", () => {
     });
     const filename = buyersPdfFilename(report.associationName, report.createdAt);
     expect(filename).toBe("TBC-Buyers-Health-Check_Palm-Sample-Condominium_2026-11-23.pdf");
+    report.assessment = checklistAssessment(report, [
+      "governing.pdf is scanned without text, could not be read.",
+    ]);
     const bytes = await renderBuyerPdf(parseReportForPdf(report));
     expect(Buffer.from(bytes).subarray(0, 5).toString()).toBe("%PDF-");
     expect(report.disclaimer.toLowerCase()).not.toContain("template");

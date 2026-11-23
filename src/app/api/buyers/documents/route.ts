@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { loadBuyerSession, SPENT_COOKIE } from "@/lib/buyers/access";
-import { inspectUpload, slotById } from "@/lib/buyers/documents";
+import { FUNCTION_BODY_BYTES } from "@/lib/buyers/constants";
+import { inspectUpload, safeFileName, slotById } from "@/lib/buyers/documents";
 import { BuyersError } from "@/lib/buyers/errors";
-import { addBuyerDocument, removeBuyerDocument } from "@/lib/buyers/service";
+import { addBuyerDocument, registerBuyerBlob, removeBuyerDocument } from "@/lib/buyers/service";
 import { allowRequest, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -27,6 +28,28 @@ export async function POST(request: NextRequest) {
   try {
     if (!allowRequest(`buyers-upload:${clientIp(request)}`, 40, 15 * 60 * 1000)) {
       return json({ error: "Too many uploads. Wait a few minutes and try again." }, 429);
+    }
+    if ((request.headers.get("content-type") ?? "").includes("application/json")) {
+      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+      const token = typeof body?.t === "string" ? body.t : "";
+      if (token.length < 20 || token.length > 4000) {
+        return json({ error: "This link is not valid." }, 401);
+      }
+      const session = await loadBuyerSession(token, request.cookies.get(SPENT_COOKIE)?.value);
+      if (!session.ok || session.status !== "active") {
+        return json({ error: "This link is not active." }, 401);
+      }
+      if (body?.action !== "register") return json({ error: "That action is not recognized." }, 400);
+      const file = await registerBuyerBlob({
+        grantId: session.grantId,
+        slot: typeof body.slot === "string" ? body.slot : "",
+        fileName: safeFileName(typeof body.fileName === "string" ? body.fileName : ""),
+        contentType: typeof body.contentType === "string" ? body.contentType : "application/octet-stream",
+        byteSize: typeof body.byteSize === "number" ? body.byteSize : 0,
+        pathname: typeof body.pathname === "string" ? body.pathname : "",
+        consent: body.consent === true,
+      });
+      return json({ ok: true, file });
     }
     const form = await request.formData();
     const token = form.get("t");
@@ -69,9 +92,11 @@ export async function POST(request: NextRequest) {
     if (!(incoming instanceof File)) {
       return json({ error: "Choose a file to upload." }, 400);
     }
-    if (incoming.size > 4 * 1024 * 1024) {
+    if (incoming.size > FUNCTION_BODY_BYTES) {
       return json(
-        { error: "Each file must be 4 MB or smaller." },
+        {
+          error: `${incoming.name} is too large to send through the form. Use the direct upload, which allows 50 MB.`,
+        },
         413,
       );
     }

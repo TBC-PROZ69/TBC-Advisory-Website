@@ -1,8 +1,10 @@
 import {
+  UPLOAD_TTL_MS,
   AGENT_MONTHLY_PRICE_USD,
   AGENT_TOKEN_YEARS,
   DEFAULT_AGENT_MONTHLY_CAP,
   FILE_TTL_DAYS,
+  MAX_FILE_BYTES,
   MAX_FILES,
   MAX_TOTAL_BYTES,
   ONE_TIME_LINK_DAYS,
@@ -13,9 +15,12 @@ import { looksLikeEmail } from "@/lib/buyers/intake";
 import type { FileRecord, GrantRecord, Ledger } from "@/lib/buyers/ledger";
 import { slotById } from "@/lib/buyers/documents";
 import type { DeclaredFile } from "@/lib/buyers/payload";
+import { assessDocuments } from "@/lib/buyers/assessment";
+import { extractDocument } from "@/lib/buyers/extract";
 import { buildBuyerReport, type BuyerReport } from "@/lib/buyers/report";
 import {
   deletePrivateBytes,
+  readPrivateBytes,
   listPrivateDocs,
   markSwept,
   putPrivateBytes,
@@ -176,10 +181,10 @@ function toAdminGrant(ledger: Ledger, grant: GrantRecord) {
 }
 
 async function sweepLedger(ledger: Ledger, now = new Date()) {
-  const cutoff = now.getTime() - FILE_TTL_MS;
+  const fileCutoff = now.getTime() - UPLOAD_TTL_MS;
   const keep: FileRecord[] = [];
   for (const file of ledger.files) {
-    if (Date.parse(file.storedAt) < cutoff) {
+    if (Date.parse(file.storedAt) < fileCutoff) {
       await deletePrivateBytes(file.storageKey);
       continue;
     }
@@ -190,12 +195,12 @@ async function sweepLedger(ledger: Ledger, now = new Date()) {
   const stored = await listPrivateDocs();
   for (const item of stored) {
     if (known.has(item.key)) continue;
-    if (!/^buyers\/docs\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(item.key)) continue;
-    if (Date.parse(item.uploadedAt) < cutoff) {
+    if (!item.key.startsWith("buyers/docs/") || item.key.includes("..")) continue;
+    if (Date.parse(item.uploadedAt) < fileCutoff) {
       await deletePrivateBytes(item.key);
     }
   }
-  const reportCutoff = cutoff;
+  const reportCutoff = now.getTime() - FILE_TTL_MS;
   ledger.reports = ledger.reports.filter(
     (report) => Date.parse(report.createdAt) >= reportCutoff,
   );
@@ -389,7 +394,7 @@ export async function addBuyerDocument(input: {
     const total =
       existing.reduce((sum, item) => sum + item.byteSize, 0) + file.byteSize;
     if (total > MAX_TOTAL_BYTES) {
-      throw new BuyersError("This packet is over the 32 MB total limit.", 400);
+      throw new BuyersError("This packet is over the 200 MB total limit.", 400);
     }
     await putPrivateBytes(file.storageKey, input.bytes, input.contentType);
     ledger.files.push(file);
@@ -399,6 +404,74 @@ export async function addBuyerDocument(input: {
       await deletePrivateBytes(file.storageKey);
       throw error;
     }
+    return {
+      id: file.id,
+      slot: file.slot,
+      fileName: file.fileName,
+      byteSize: file.byteSize,
+    };
+  });
+}
+
+export async function registerBuyerBlob(input: {
+  grantId: string;
+  slot: string;
+  fileName: string;
+  contentType: string;
+  byteSize: number;
+  pathname: string;
+  consent: boolean;
+}) {
+  if (!input.consent) {
+    throw new BuyersError("Confirm the consent line before uploading.", 400, "consent");
+  }
+  const slot = slotById(input.slot);
+  if (!slot) throw new BuyersError("That document slot is not recognized.", 400);
+  const prefix = `buyers/docs/${input.grantId}/`;
+  if (!input.pathname.startsWith(prefix) || input.pathname.includes("..")) {
+    throw new BuyersError("Storage key rejected.", 400);
+  }
+  if (input.byteSize < 1 || input.byteSize > MAX_FILE_BYTES) {
+    throw new BuyersError("Each file must be 50 MB or smaller.", 400);
+  }
+  return withBuyersLock(async () => {
+    const ledger = await lockedRead();
+    const existing = ledger.files.filter((item) => item.grantId === input.grantId);
+    const inSlot = existing.filter((item) => item.slot === slot.id);
+    if (inSlot.length >= slot.maxFiles) {
+      throw new BuyersError(
+        `That document already has the maximum of ${slot.maxFiles} files.`,
+        400,
+      );
+    }
+    if (existing.length >= MAX_FILES) {
+      throw new BuyersError("This packet already has the maximum number of files.", 400);
+    }
+    const total = existing.reduce((sum, item) => sum + item.byteSize, 0) + input.byteSize;
+    if (total > MAX_TOTAL_BYTES) {
+      throw new BuyersError("This packet is over the 200 MB total limit.", 400);
+    }
+    if (existing.some((item) => item.storageKey === input.pathname)) {
+      const found = existing.find((item) => item.storageKey === input.pathname)!;
+      return {
+        id: found.id,
+        slot: found.slot,
+        fileName: found.fileName,
+        byteSize: found.byteSize,
+      };
+    }
+    const file: FileRecord = {
+      id: newId(),
+      grantId: input.grantId,
+      slot: slot.id,
+      fileName: input.fileName,
+      contentType: input.contentType,
+      byteSize: input.byteSize,
+      storedAt: new Date().toISOString(),
+      storageKey: input.pathname,
+    };
+    ledger.files.push(file);
+    await writeLedger(ledger);
     return {
       id: file.id,
       slot: file.slot,
@@ -491,53 +564,67 @@ export async function commitBuyerReport(input: {
       );
     }
     const stored = ledger.files.filter((file) => file.grantId === grant.id);
-    const files = filesForReport(publicFiles(stored), input.declaredFiles ?? [], input.choices);
-    if (files.length > 0 && !input.consent) {
-      throw new BuyersError(
-        "Confirm the consent line before a report can list uploaded files.",
-        400,
-        "consent",
-      );
-    }
-    const monthlyCap = capFor(grant);
-    const reportsThisMonth = countMonth(ledger, grant.id);
-    const overCap = monthlyCap !== null && reportsThisMonth >= monthlyCap;
-    const now = new Date();
-    const report = buildBuyerReport({
-      id: newId(),
-      createdAt: now.toISOString(),
-      intake: input.intake,
-      notes: input.notes,
-      files,
-      choices: input.choices,
-      linkKind: grant.kind,
-      subscriptionAgent:
-        grant.kind === "agent"
-          ? { name: grant.agentName, license: grant.agentLicense }
-          : null,
-      overCap,
-      monthlyCap,
-    });
-    ledger.reports.unshift({
-      id: report.id,
-      grantId: grant.id,
-      createdAt: report.createdAt,
-      monthKey: monthKey(now),
-      overCap,
-      emailed: false,
-      report,
-    });
-    if (grant.kind === "one-time") {
-      grant.status = "spent";
-      grant.spentAt = now.toISOString();
-    }
     const keys = stored.map((file) => file.storageKey);
-    ledger.files = ledger.files.filter((file) => file.grantId !== grant.id);
-    await writeLedger(ledger);
-    for (const key of keys) {
-      await deletePrivateBytes(key);
+    const dropFiles = async () => {
+      ledger.files = ledger.files.filter((file) => file.grantId !== grant.id);
+      for (const key of keys) await deletePrivateBytes(key);
+    };
+    try {
+      const files = filesForReport(publicFiles(stored), input.declaredFiles ?? [], input.choices);
+      if (files.length > 0 && !input.consent) {
+        throw new BuyersError(
+          "Confirm the consent line before a report can list uploaded files.",
+          400,
+          "consent",
+        );
+      }
+      const monthlyCap = capFor(grant);
+      const reportsThisMonth = countMonth(ledger, grant.id);
+      const overCap = monthlyCap !== null && reportsThisMonth >= monthlyCap;
+      const now = new Date();
+      const report = buildBuyerReport({
+        id: newId(),
+        createdAt: now.toISOString(),
+        intake: input.intake,
+        notes: input.notes,
+        files,
+        choices: input.choices,
+        linkKind: grant.kind,
+        subscriptionAgent:
+          grant.kind === "agent"
+            ? { name: grant.agentName, license: grant.agentLicense }
+            : null,
+        overCap,
+        monthlyCap,
+      });
+      const extracted = [];
+      for (const file of stored) {
+        const bytes = await readPrivateBytes(file.storageKey);
+        extracted.push(await extractDocument(file.fileName, bytes ?? new Uint8Array()));
+      }
+      report.assessment = await assessDocuments(report, extracted);
+      extracted.length = 0;
+      ledger.reports.unshift({
+        id: report.id,
+        grantId: grant.id,
+        createdAt: report.createdAt,
+        monthKey: monthKey(now),
+        overCap,
+        emailed: false,
+        report,
+      });
+      if (grant.kind === "one-time") {
+        grant.status = "spent";
+        grant.spentAt = now.toISOString();
+      }
+      await dropFiles();
+      await writeLedger(ledger);
+      return { report, overCap, grantId: grant.id, kind: grant.kind };
+    } catch (error) {
+      await dropFiles();
+      await writeLedger(ledger).catch(() => undefined);
+      throw error;
     }
-    return { report, overCap, grantId: grant.id, kind: grant.kind };
   });
 }
 

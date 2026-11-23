@@ -312,7 +312,7 @@ export function inspectUpload(fileName: string, mime: string, bytes: Uint8Array)
   if (bytes.byteLength > MAX_FILE_BYTES) {
     return {
       ok: false as const,
-      error: "Each file must be 4 MB or smaller. Split a large PDF across the slots that allow more than one file.",
+      error: "Each file must be 50 MB or smaller.",
     };
   }
   const ext = extensionOf(fileName);
@@ -401,7 +401,7 @@ export function totalsWithinLimits(files: { byteSize: number }[], adding = 0) {
   }
   const total = files.reduce((sum, file) => sum + file.byteSize, 0) + adding;
   if (total > MAX_TOTAL_BYTES) {
-    return "This packet is over the 32 MB total limit.";
+    return "This packet is over the 200 MB total limit.";
   }
   return null;
 }

@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 
+import type { BuyerAssessment } from "@/lib/buyers/assessment";
+import { DOMAINS, RATINGS } from "@/lib/buyers/assessment";
 import { BuyersError } from "@/lib/buyers/errors";
 import type { BuyerReport } from "@/lib/buyers/report";
 import type { BuyerBand } from "@/lib/buyers/types";
@@ -127,6 +129,67 @@ export function parseReportForPdf(value: unknown): BuyerReport {
     }),
     attachedNotes: [],
     documents: [],
+    assessment: clipAssessment(record.assessment),
+  };
+}
+
+function clipAssessment(value: unknown): BuyerAssessment | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const rating = clip(record.overallRating, 20);
+  if (!RATINGS.includes(rating as (typeof RATINGS)[number])) return null;
+  const rows = Array.isArray(record.scorecard) ? record.scorecard : [];
+  const numbers = Array.isArray(record.keyNumbers) ? record.keyNumbers : [];
+  const findings = Array.isArray(record.findings) ? record.findings : [];
+  const strings = (key: string) =>
+    (Array.isArray(record[key]) ? record[key] : [])
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.slice(0, 500))
+      .slice(0, 20);
+  return {
+    overallRating: rating as BuyerAssessment["overallRating"],
+    bottomLine: clip(record.bottomLine, 1200),
+    unavailable: clip(record.unavailable, 300) || null,
+    scorecard: rows.slice(0, 8).flatMap((item) => {
+      const row = asRecord(item);
+      const domain = clip(row?.domain, 80);
+      const rowRating = clip(row?.rating, 20);
+      if (!DOMAINS.includes(domain as (typeof DOMAINS)[number])) return [];
+      if (!RATINGS.includes(rowRating as (typeof RATINGS)[number])) return [];
+      return [
+        {
+          domain: domain as BuyerAssessment["scorecard"][number]["domain"],
+          rating: rowRating as BuyerAssessment["overallRating"],
+          note: clip(row?.note, 500),
+        },
+      ];
+    }),
+    keyNumbers: numbers.slice(0, 20).map((item) => {
+      const row = asRecord(item);
+      return {
+        label: clip(row?.label, 120),
+        value: clip(row?.value, 80),
+        source: clip(row?.source, 160),
+        page: clip(row?.page, 40),
+      };
+    }),
+    findings: findings.slice(0, 20).flatMap((item) => {
+      const row = asRecord(item);
+      const domain = clip(row?.domain, 80);
+      if (!DOMAINS.includes(domain as (typeof DOMAINS)[number])) return [];
+      return [
+        {
+          domain: domain as BuyerAssessment["findings"][number]["domain"],
+          whatItSays: clip(row?.whatItSays, 800),
+          citation: clip(row?.citation, 200),
+          whyItMatters: clip(row?.whyItMatters, 500),
+          askBeforeClosing: clip(row?.askBeforeClosing, 400),
+        },
+      ];
+    }),
+    redFlags: strings("redFlags"),
+    questions: strings("questions"),
+    dataGaps: strings("dataGaps"),
   };
 }
 
@@ -261,8 +324,39 @@ export async function renderBuyerPdf(report: BuyerReport) {
   if (report.typedAgentLine) paragraph(`Agent named on the form: ${report.typedAgentLine}`);
   paragraph(`Date: ${preparedOn(report.createdAt)}`);
 
+  const assessment = report.assessment;
   heading("Summary rating");
-  paragraph(`${report.overallBand}. ${report.summary}`);
+  if (assessment) {
+    paragraph(`${assessment.overallRating}. ${assessment.bottomLine || report.summary}`);
+    if (assessment.unavailable) paragraph(assessment.unavailable);
+    heading("Scorecard");
+    for (const row of assessment.scorecard) {
+      bullet(`${row.domain}: ${row.rating}`, row.note);
+    }
+    heading("Key numbers");
+    if (assessment.keyNumbers.length === 0) paragraph("No figure was quoted from a document.");
+    for (const row of assessment.keyNumbers) {
+      bullet(row.label, `${row.value} (${row.source}, ${row.page})`);
+    }
+    heading("What the documents say");
+    if (assessment.findings.length === 0) paragraph("No quoted finding was returned.");
+    for (const row of assessment.findings) {
+      bullet(
+        row.domain,
+        `${row.whatItSays} Citation: ${row.citation} Why it matters: ${row.whyItMatters} Ask: ${row.askBeforeClosing}`,
+      );
+    }
+    heading("Red flags");
+    if (assessment.redFlags.length === 0) paragraph("None listed.");
+    for (const item of assessment.redFlags) paragraph(item);
+    heading("Questions to ask");
+    for (const item of assessment.questions) paragraph(item);
+    heading("Data gaps");
+    if (assessment.dataGaps.length === 0) paragraph("None.");
+    for (const item of assessment.dataGaps) paragraph(item);
+  } else {
+    paragraph(`${report.overallBand}. ${report.summary}`);
+  }
 
   heading("Risk findings");
   if (report.findings.length === 0) {

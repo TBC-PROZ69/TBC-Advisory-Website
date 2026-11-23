@@ -7,6 +7,7 @@ import {
   type PublicFile,
 } from "@/lib/buyers/documents";
 import { stateName } from "@/lib/buyers/intake";
+import type { BuyerAssessment } from "@/lib/buyers/assessment";
 import type {
   BuyerBand,
   BuyerIntake,
@@ -59,6 +60,7 @@ export type BuyerReport = {
   notApplicable: { id: string; title: string }[];
   attachedNotes: ReportFinding[];
   documents: ReportDocument[];
+  assessment?: BuyerAssessment | null;
 };
 
 function bandFor(highMissing: number, anyMissing: number): BuyerBand {

@@ -23,6 +23,7 @@ import {
 import { allowRequest, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, {
