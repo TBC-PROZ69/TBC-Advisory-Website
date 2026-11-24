@@ -121,7 +121,7 @@ function chunksOf(doc: ExtractedDocument) {
 const RULES = [
   "You prepare checklists and guidance for a Florida condominium or homeowners association buyer.",
   "Use only the text provided. Never invent a dollar amount, percent, date, or name.",
-  "Quote figures exactly and cite the file name and page or sheet.",
+  "Copy figures from the text, then write dollars as $250,100, negative amounts as ($18,400), and percents as 41%. Do not put quotation marks around figures or sentences. Cite the file name and page or sheet.",
   "If a figure is not in the text, leave it out and say it was not in the documents.",
   "Do not use em dashes. Do not use the word templates.",
   "Be specific about reserves, budget variance, insurance share of the budget, legal spend, and special assessments when those words and numbers are in the text.",

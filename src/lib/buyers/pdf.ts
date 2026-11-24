@@ -25,6 +25,37 @@ const FOOTER_Y = 32;
 const PDF_DISCLAIMER =
   "This Buyers Health Check is checklists and guidance. It is informational only. It quotes text and figures taken from the documents provided. It is not legal advice, financial advice, an engineering opinion, or an inspection. A scanned page may be unreadable. Confirm anything that matters with the association before closing.";
 
+function formatMoneyToken(raw: string) {
+  const negative = raw.includes("(") || /^-/.test(raw.trim()) || /\$\s*-/.test(raw) || /-\s*\$/.test(raw);
+  const digits = raw.replace(/[^\d.]/g, "");
+  if (!digits) return raw;
+  const [whole, fraction] = digits.split(".");
+  const amount = Number(whole).toLocaleString("en-US");
+  const formatted = fraction !== undefined ? `${amount}.${fraction.slice(0, 2).padEnd(2, "0")}` : amount;
+  return negative ? `($${formatted})` : `$${formatted}`;
+}
+
+/** PDF display for figures. Citations stay in the source column. */
+export function formatPdfFigures(value: string, mode: "prose" | "value" = "prose") {
+  let text = value.replace(/[“”"]/g, "");
+  text = text.replace(/(\d+(?:\.\d+)?)\s*percent\b/gi, "$1%");
+  text = text.replace(
+    /\(\$\s?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)|\$-\s?\d{1,3}(?:,\d{3})*(?:\.\d+)?|-\$\s?\d{1,3}(?:,\d{3})*(?:\.\d+)?|\$\s?\d{1,3}(?:,\d{3})*(?:\.\d+)?/g,
+    (token) => formatMoneyToken(token),
+  );
+  text = text.replace(/(?<![\d$])-\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\d$])-\d{4,}(?:\.\d+)?/g, (token) =>
+    formatMoneyToken(token),
+  );
+  if (mode === "value") {
+    text = text.replace(/(?<![\d.,$])(-?\d{1,3}(?:,\d{3})+|-?\d{3,})(?:\.\d{1,2})?(?![\d%])/g, (token) => {
+      if (/^(?:19|20)\d{2}$/.test(token)) return token;
+      return formatMoneyToken(token);
+    });
+    if (!/[A-Za-z]/.test(text)) text = text.replace(/\.+$/, "");
+  }
+  return text.replace(/[ \t]{2,}/g, " ").trim();
+}
+
 function winAnsi(value: string) {
   return value
     .replace(/[\u2018\u2019]/g, "'")
@@ -335,7 +366,7 @@ export async function renderBuyerPdf(report: BuyerReport) {
         const used = header ? bold : font;
         lines = Math.max(lines, wrap(cell || " ", used, size, Math.max(12, widths[index] - 8)).length);
       });
-      return lines * lineHeight + 10;
+      return Math.max(lines * lineHeight + 10, !header && chipColumn >= 0 ? 24 : 0);
     }
     function paint(cells: string[], header: boolean, zebra: boolean) {
       const height = rowHeight(cells, header);
@@ -364,17 +395,21 @@ export async function renderBuyerPdf(report: BuyerReport) {
           });
         } else if (index === chipColumn) {
           const label = winAnsi(cell || "");
-          const chipWidth = Math.min(widths[index] - 8, bold.widthOfTextAtSize(label, 8) + 12);
+          const chipWidth = Math.ceil(bold.widthOfTextAtSize("Critical", 8) + 16);
+          const chipHeight = 14;
+          const chipX = x + 6;
+          const chipY = bottom + height - chipHeight - 4;
           page.drawRectangle({
-            x: x + 4,
-            y: bottom + 5,
-            width: Math.max(chipWidth, 42),
-            height: 14,
+            x: chipX,
+            y: chipY,
+            width: chipWidth,
+            height: chipHeight,
             color: ratingColor(cell),
           });
+          const textWidth = bold.widthOfTextAtSize(label, 8);
           page.drawText(label, {
-            x: x + 8,
-            y: bottom + 8,
+            x: chipX + Math.max(4, (chipWidth - textWidth) / 2),
+            y: chipY + 3.5,
             size: 8,
             font: bold,
             color: WHITE,
@@ -413,12 +448,12 @@ export async function renderBuyerPdf(report: BuyerReport) {
   const assessment = report.assessment;
   heading("Summary rating");
   if (assessment) {
-    paragraph(`${assessment.overallRating}. ${assessment.bottomLine || report.summary}`);
+    paragraph(`${assessment.overallRating}. ${formatPdfFigures(assessment.bottomLine || report.summary)}`);
     if (assessment.unavailable) paragraph(assessment.unavailable);
     heading("Scorecard");
     drawTable(
       ["Domain", "Rating", "Note"],
-      assessment.scorecard.map((row) => [row.domain, row.rating, row.note]),
+      assessment.scorecard.map((row) => [row.domain, row.rating, formatPdfFigures(row.note)]),
       [190, 78, 248],
       1,
     );
@@ -427,7 +462,11 @@ export async function renderBuyerPdf(report: BuyerReport) {
     else {
       drawTable(
         ["Metric", "Value", "Source"],
-        assessment.keyNumbers.map((row) => [row.label, row.value, `${row.source}, ${row.page}`]),
+        assessment.keyNumbers.map((row) => [
+          formatPdfFigures(row.label),
+          formatPdfFigures(row.value, "value"),
+          `${formatPdfFigures(row.source)}, ${formatPdfFigures(row.page)}`,
+        ]),
         [170, 110, 236],
       );
     }
@@ -438,20 +477,20 @@ export async function renderBuyerPdf(report: BuyerReport) {
       if (items.length === 0) continue;
       heading(domain);
       for (const row of items) {
-        paragraph(row.whatItSays);
-        paragraph(`Citation: ${row.citation}`);
-        paragraph(`Why it matters: ${row.whyItMatters}`);
-        paragraph(`Ask before closing: ${row.askBeforeClosing}`);
+        paragraph(formatPdfFigures(row.whatItSays));
+        paragraph(`Citation: ${formatPdfFigures(row.citation)}`);
+        paragraph(`Why it matters: ${formatPdfFigures(row.whyItMatters)}`);
+        paragraph(`Ask before closing: ${formatPdfFigures(row.askBeforeClosing)}`);
       }
     }
     heading("Red flags");
     if (assessment.redFlags.length === 0) paragraph("None listed.");
-    for (const item of assessment.redFlags) paragraph(item);
+    for (const item of assessment.redFlags) paragraph(formatPdfFigures(item));
     heading("Questions to ask");
-    for (const item of assessment.questions) paragraph(item);
+    for (const item of assessment.questions) paragraph(formatPdfFigures(item));
     heading("Data gaps");
     if (assessment.dataGaps.length === 0) paragraph("None.");
-    for (const item of assessment.dataGaps) paragraph(item);
+    for (const item of assessment.dataGaps) paragraph(formatPdfFigures(item));
   } else {
     paragraph(`${report.overallBand}. ${report.summary}`);
   }

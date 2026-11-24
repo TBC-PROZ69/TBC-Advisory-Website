@@ -15,7 +15,7 @@ import {
 import { BuyersError } from "@/lib/buyers/errors";
 import { toIntake, type IntakeDraft } from "@/lib/buyers/intake";
 import { checklistAssessment } from "@/lib/buyers/assessment";
-import { buyersPdfFilename, parseReportForPdf, renderBuyerPdf } from "@/lib/buyers/pdf";
+import { buyersPdfFilename, formatPdfFigures, parseReportForPdf, renderBuyerPdf } from "@/lib/buyers/pdf";
 import { buildBuyerReport } from "@/lib/buyers/report";
 import {
   addBuyerDocument,
@@ -496,6 +496,17 @@ describe("links, reports, and private files", () => {
 });
 
 describe("buyer pdf", () => {
+  it("formats figures without quotation marks", () => {
+    expect(formatPdfFigures('"$250,100."', "value")).toBe("$250,100");
+    expect(formatPdfFigures('"41 percent."', "value")).toBe("41%");
+    expect(formatPdfFigures('"-18400"', "value")).toBe("($18,400)");
+    expect(formatPdfFigures('"12000; -18400"', "value")).toBe("$12,000; ($18,400)");
+    expect(formatPdfFigures('Reserves are "41 percent" funded, cash "$250,100", deficit "-18400".')).toBe(
+      "Reserves are 41% funded, cash $250,100, deficit ($18,400).",
+    );
+    expect(formatPdfFigures("reserve-study.pdf, page 4")).toBe("reserve-study.pdf, page 4");
+  });
+
   it("builds a branded PDF from the report already on the page", async () => {
     const { intake, choices } = allMissing("no");
     choices.budget = "uploaded";
