@@ -49,6 +49,13 @@ export const assessmentSchema = z.object({
   redFlags: z.array(z.string()),
   questions: z.array(z.string()),
   dataGaps: z.array(z.string()),
+  mismatches: z.array(
+    z.object({
+      checklistItem: z.string(),
+      marked: z.string(),
+      foundIn: z.string(),
+    }),
+  ),
 });
 
 export type BuyerAssessment = z.infer<typeof assessmentSchema> & {
@@ -98,50 +105,43 @@ export function checklistAssessment(
     redFlags: missing.slice(0, 8).map((title) => `${title} was not provided.`),
     questions: report.requests.map((item) => item.ask),
     dataGaps: unread,
+    mismatches: [],
     unavailable: null,
   };
 }
 
-const CHUNK_CHARS = 7000;
+const CHUNK_CHARS = 12000;
 
-export function chunksOf(doc: ExtractedDocument) {
-  const chunks: string[] = [];
-  let current = `${doc.fileName}\n`;
+export type DocumentChunk = { fileName: string; pages: string[]; text: string };
+
+/** Each page is placed in exactly one chunk. A page is never split. */
+export function chunksOf(doc: ExtractedDocument): DocumentChunk[] {
+  const chunks: DocumentChunk[] = [];
+  let current: DocumentChunk = { fileName: doc.fileName, pages: [], text: `${doc.fileName}\n` };
   for (const page of doc.pages) {
     const block = `[${doc.fileName}, ${page.label}]\n${page.text}\n`;
-    if (current.length + block.length > CHUNK_CHARS && current.length > doc.fileName.length + 1) {
+    if (current.pages.length > 0 && current.text.length + block.length > CHUNK_CHARS) {
       chunks.push(current);
-      current = `${doc.fileName}\n${block}`;
-    } else {
-      current += block;
+      current = { fileName: doc.fileName, pages: [], text: `${doc.fileName}\n` };
     }
+    current.pages.push(page.label);
+    current.text += block;
   }
-  if (current.trim()) chunks.push(current);
+  if (current.pages.length > 0) chunks.push(current);
   return chunks;
 }
 
-export type MappedNote = { point: string; citation: string; figure: string };
-
-/** Every money, percent, and day-count line, with its page, so a later page is not dropped. */
-export function figuresInDocument(doc: ExtractedDocument): MappedNote[] {
-  const notes: MappedNote[] = [];
-  for (const page of doc.pages) {
-    for (const line of page.text.split(/\n/)) {
-      const trimmed = line.replace(/\s+/g, " ").trim();
-      const money = trimmed.match(/\$\s?\d[\d,]*(?:\.\d+)?/);
-      const percent = trimmed.match(/\d+(?:\.\d+)?\s*(?:percent|%)/i);
-      const days = trimmed.match(/\b\d+\s+days\b/i);
-      const figure = money?.[0] ?? percent?.[0] ?? days?.[0];
-      if (!figure) continue;
-      notes.push({
-        point: trimmed.slice(0, 400),
-        citation: `${doc.fileName}, ${page.label}`,
-        figure,
-      });
-    }
+export function coverageGaps(doc: ExtractedDocument, chunks: DocumentChunk[]) {
+  const counts = new Map<string, number>();
+  for (const chunk of chunks) {
+    for (const page of chunk.pages) counts.set(page, (counts.get(page) ?? 0) + 1);
   }
-  return notes;
+  return doc.pages
+    .filter((page) => counts.get(page.label) !== 1)
+    .map((page) => `${doc.fileName}, ${page.label}`);
 }
+
+export type MappedNote = { point: string; citation: string; figure: string };
 
 async function mapPool<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>) {
   const results = new Array<R>(items.length);
@@ -159,33 +159,10 @@ async function mapPool<T, R>(items: T[], limit: number, task: (item: T) => Promi
   return results;
 }
 
-function digits(value: string) {
-  return value.replace(/[^\d.]/g, "");
-}
-
-function mergeFigures(
-  keyNumbers: BuyerAssessment["keyNumbers"],
-  notes: MappedNote[],
-) {
-  for (const note of notes) {
-    const value = note.figure.replace(/[“”"]/g, "").replace(/\$\s+/, "$").trim();
-    const amount = digits(value);
-    if (!amount) continue;
-    const citation = note.citation;
-    const comma = citation.lastIndexOf(", ");
-    const source = comma > 0 ? citation.slice(0, comma) : citation;
-    const page = comma > 0 ? citation.slice(comma + 2) : "";
-    const already = keyNumbers.some(
-      (row) => digits(row.value) === amount && row.page.replace(/\s+/g, " ").includes(page),
-    );
-    if (already) continue;
-    keyNumbers.push({
-      label: plain(note.point).slice(0, 160),
-      value,
-      source: plain(source),
-      page: plain(page),
-    });
-  }
+function figureRank(row: { label: string; value: string }) {
+  const text = `${row.label} ${row.value}`;
+  if (text.includes("$") || text.includes("%")) return 0;
+  return 1;
 }
 
 const RULES = [
@@ -206,45 +183,121 @@ export async function assessDocuments(
   if (readable.length === 0) return checklistAssessment(report, unread);
 
   try {
-    const chunks = readable.flatMap((doc) => chunksOf(doc));
-    const mapped = await mapPool(chunks, 6, async (chunk) => {
-      try {
-        const result = await generateText({
-          model: "openai/gpt-5-mini",
-          output: Output.object({ schema: chunkSchema }),
-          system: RULES,
-          prompt: `List every dollar amount, percent, day count, and vote rule in this excerpt. Include small fees. One note per figure. The citation is the file name and page from the bracket. If there is no number, return an empty notes list.\n\n${chunk}`,
-        });
-        return result.output?.notes ?? [];
-      } catch {
-        return [];
-      }
+    const chunks = readable.flatMap((doc) => {
+      const docChunks = chunksOf(doc);
+      const gaps = coverageGaps(doc, docChunks);
+      console.log(
+        "Buyers chunk coverage",
+        JSON.stringify({
+          file: doc.fileName,
+          pages: doc.pages.length,
+          chunks: docChunks.map((chunk) => chunk.pages),
+          gaps,
+        }),
+      );
+      return docChunks;
     });
-    const pageNotes = readable.flatMap((doc) => figuresInDocument(doc));
-    const notes = [...mapped.flat(), ...pageNotes];
+    const failedPages: string[] = [];
+    const mapped = await mapPool(chunks, 8, async (chunk) => {
+      const prompt = `Read this excerpt and list every figure and restriction it states. One note per item. Put the number or limit in figure, such as $150, 41%, or 180 days. The citation is the file name and page from the bracket. Include a small fee on a late page. If there is no figure or rule, return an empty notes list.\n\n${chunk.text}`;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const result = await generateText({
+            model: "openai/gpt-5-mini",
+            output: Output.object({ schema: chunkSchema }),
+            system: RULES,
+            prompt,
+          });
+          return result.output?.notes ?? [];
+        } catch (error) {
+          if (attempt === 0) continue;
+          console.error(
+            "Buyers chunk failed",
+            chunk.fileName,
+            chunk.pages.join(", "),
+            error instanceof Error ? error.name : "error",
+          );
+          failedPages.push(...chunk.pages.map((page) => `${chunk.fileName}, ${page}`));
+          return [];
+        }
+      }
+      return [];
+    });
+    const notes = mapped.flat();
+    const attached = report.documents
+      .filter((item) => item.files.length > 0)
+      .map((item) => ({
+        checklistItem: item.title,
+        files: item.files.map((file) => file.fileName),
+      }));
+    let output: z.infer<typeof assessmentSchema> | undefined;
+    try {
     const result = await generateText({
       model: "openai/gpt-5-mini",
       output: Output.object({ schema: assessmentSchema }),
       system: RULES,
-      prompt: `Write the report from these extracted notes. Put every figure into keyNumbers, including a small fee on a late page. Do not drop a note because the amount is small.\n\n${JSON.stringify({
+      prompt: `Write the report from the notes the map step extracted. keyNumbers must include each of these when a note states it: operating budget, budgeted surplus or deficit, year-to-date result compared with budget, reserve cash, recommended reserve balance, percent funded, insurance cost, insurance share of the budget, legal spend compared with its budget, unfunded capital item, special assessment, delinquency total, and any fee. One row per figure, with the note's file and page. Do not leave the table as a single voting row when money figures were extracted. Do not invent a figure that is not in the notes.\n\nA checklist item marked not in hand is not missing when an attached file's notes already contain that information. Put that on mismatches and do not call it missing in Documentation completeness or dataGaps. Example: the checklist says the budget was not provided, but financial-report.pdf states the adopted budget.\n\n${JSON.stringify({
         association: report.associationName,
         unit: report.unitAddress,
         buyer: report.personName,
-        missing: report.requests.map((item) => item.title),
+        attached,
+        markedNotInHand: report.requests.map((item) => item.title),
         doesNotApply: report.notApplicable.map((item) => item.title),
-        unread,
+        unread: [...unread, ...failedPages.map((page) => `${page} was not read after one retry.`)],
         notes,
       })}`,
     });
-    const output = result.output;
-    if (!output) return checklistAssessment(report, unread);
+    output = result.output;
+    } catch (error) {
+      console.error("Buyers reduce failed", error instanceof Error ? error.name : "error");
+      output = undefined;
+    }
+    if (!output) {
+      const fallback = checklistAssessment(report, [
+        ...unread,
+        ...failedPages.map((page) => `${page} was not read after one retry.`),
+        "The report synthesis did not finish. Figures below are the ones each chunk returned.",
+      ]);
+      for (const note of notes) {
+        const figure = plain(note.figure);
+        if (!figure) continue;
+        const citation = plain(note.citation);
+        const comma = citation.lastIndexOf(", ");
+        fallback.keyNumbers.push({
+          label: plain(note.point).slice(0, 160),
+          value: figure,
+          source: comma > 0 ? citation.slice(0, comma) : citation,
+          page: comma > 0 ? citation.slice(comma + 2) : "",
+        });
+      }
+      return fallback;
+    }
     const keyNumbers = output.keyNumbers.map((row) => ({
       label: plain(row.label),
       value: plain(row.value),
       source: plain(row.source),
       page: plain(row.page),
     }));
-    mergeFigures(keyNumbers, pageNotes);
+    for (const note of notes) {
+      const figure = plain(note.figure);
+      if (!figure) continue;
+      const citation = plain(note.citation);
+      const comma = citation.lastIndexOf(", ");
+      const source = comma > 0 ? citation.slice(0, comma) : citation;
+      const page = comma > 0 ? citation.slice(comma + 2) : "";
+      const already = keyNumbers.some(
+        (row) => row.value === figure && row.page === page && row.source === source,
+      );
+      if (already) continue;
+      keyNumbers.push({
+        label: plain(note.point).slice(0, 160),
+        value: figure,
+        source,
+        page,
+      });
+    }
+    keyNumbers.sort((left, right) => figureRank(left) - figureRank(right));
+    const unreadPages = failedPages.map((page) => `${page} was not read after one retry.`);
     return {
       overallRating: output.overallRating,
       bottomLine: plain(output.bottomLine),
@@ -259,7 +312,12 @@ export async function assessDocuments(
       })),
       redFlags: output.redFlags.map(plain),
       questions: output.questions.map(plain),
-      dataGaps: [...unread, ...output.dataGaps.map(plain)],
+      dataGaps: [...unread, ...unreadPages, ...output.dataGaps.map(plain)],
+      mismatches: (output.mismatches ?? []).map((row) => ({
+        checklistItem: plain(row.checklistItem),
+        marked: plain(row.marked),
+        foundIn: plain(row.foundIn),
+      })),
       unavailable: null,
     };
   } catch (error) {

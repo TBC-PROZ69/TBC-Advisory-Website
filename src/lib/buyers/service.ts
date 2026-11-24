@@ -637,6 +637,19 @@ export async function commitBuyerReport(input: {
         extracted.push(doc);
       }
       report.assessment = await assessDocuments(report, extracted);
+      const mismatched = report.assessment.mismatches ?? [];
+      if (mismatched.length > 0) {
+        const named = (title: string) =>
+          mismatched.some((item) => {
+            const marked = item.checklistItem.toLowerCase();
+            const current = title.toLowerCase();
+            return marked === current || marked.includes(current) || current.includes(marked);
+          });
+        report.requests = report.requests.filter((item) => !named(item.title));
+        report.findings = report.findings.filter(
+          (item) => item.status !== "not-provided" || !named(item.title),
+        );
+      }
       extracted.length = 0;
       ledger.reports.unshift({
         id: report.id,

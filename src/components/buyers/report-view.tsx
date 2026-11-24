@@ -165,6 +165,19 @@ export function ReportView({
         </section>
       ) : null}
 
+      {report.assessment?.mismatches?.length ? (
+        <section className="mt-8">
+          <h3 className="font-heading text-2xl text-navy">Checklist mismatches</h3>
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-navy/80">
+            {report.assessment.mismatches.map((item) => (
+              <li key={item.checklistItem}>
+                {item.checklistItem}. Marked {item.marked || "not in hand"}. Found in {item.foundIn}.
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="mt-8">
         <h3 className="font-heading text-2xl text-navy">Documents to request before closing</h3>
         {report.requests.length === 0 ? (

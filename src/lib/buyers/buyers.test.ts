@@ -15,7 +15,7 @@ import {
 import { BuyersError } from "@/lib/buyers/errors";
 import { toIntake, type IntakeDraft } from "@/lib/buyers/intake";
 import { checklistAssessment } from "@/lib/buyers/assessment";
-import { chunksOf, figuresInDocument } from "@/lib/buyers/assessment";
+import { chunksOf, coverageGaps } from "@/lib/buyers/assessment";
 import { buyersPdfFilename, formatPdfFigures, parseReportForPdf, renderBuyerPdf } from "@/lib/buyers/pdf";
 import { buildBuyerReport } from "@/lib/buyers/report";
 import {
@@ -508,22 +508,21 @@ describe("buyer pdf", () => {
     expect(formatPdfFigures("reserve-study.pdf, page 4")).toBe("reserve-study.pdf, page 4");
   });
 
-  it("keeps a figure on the last page of a long document", () => {
+  it("puts every page in exactly one chunk, including a long last page", () => {
     const pages = Array.from({ length: 70 }, (_, index) => ({
       label: `page ${index + 1}`,
-      text:
-        index === 69
-          ? "Transfer fee on a sale of a unit: $150. This figure is on the last page."
-          : "Owners vote in person or by limited proxy.",
+      text: `${"Owners receive notice before a meeting. ".repeat(80)} ${
+        index === 69 ? "Transfer fee of $150 on the last page." : "No fee is stated here."
+      }`,
     }));
     const doc = { fileName: "governing-ocr.pdf", pages, unread: null };
     const chunks = chunksOf(doc);
-    expect(chunks.join("\n")).toContain("[governing-ocr.pdf, page 70]");
-    expect(chunks.join("\n")).toContain("$150");
-    const figures = figuresInDocument(doc);
-    expect(figures.some((note) => note.figure === "$150" && note.citation.endsWith("page 70"))).toBe(
-      true,
-    );
+    expect(coverageGaps(doc, chunks)).toEqual([]);
+    expect(chunks.reduce((sum, chunk) => sum + chunk.pages.length, 0)).toBe(70);
+    const last = chunks.find((chunk) => chunk.pages.includes("page 70"));
+    expect(last?.pages.filter((page) => page === "page 70")).toHaveLength(1);
+    expect(last?.text).toContain("[governing-ocr.pdf, page 70]");
+    expect(last?.text).toContain("$150");
   });
 
   it("builds a branded PDF from the report already on the page", async () => {

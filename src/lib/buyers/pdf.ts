@@ -178,7 +178,7 @@ function clipAssessment(value: unknown): BuyerAssessment | null {
     (Array.isArray(record[key]) ? record[key] : [])
       .filter((item): item is string => typeof item === "string")
       .map((item) => item.slice(0, 500))
-      .slice(0, 20);
+      .slice(0, 40);
   return {
     overallRating: rating as BuyerAssessment["overallRating"],
     bottomLine: clip(record.bottomLine, 1200),
@@ -197,16 +197,30 @@ function clipAssessment(value: unknown): BuyerAssessment | null {
         },
       ];
     }),
-    keyNumbers: numbers.slice(0, 20).map((item) => {
+    keyNumbers: numbers.slice(0, 40).map((item) => {
       const row = asRecord(item);
       return {
-        label: clip(row?.label, 120),
-        value: clip(row?.value, 80),
+        label: clip(row?.label, 180),
+        value: clip(row?.value, 120),
         source: clip(row?.source, 160),
         page: clip(row?.page, 40),
       };
     }),
-    findings: findings.slice(0, 20).flatMap((item) => {
+    mismatches: (Array.isArray(record.mismatches) ? record.mismatches : [])
+      .slice(0, 20)
+      .flatMap((item) => {
+        const row = asRecord(item);
+        const checklistItem = clip(row?.checklistItem, 160);
+        if (!checklistItem) return [];
+        return [
+          {
+            checklistItem,
+            marked: clip(row?.marked, 200),
+            foundIn: clip(row?.foundIn, 300),
+          },
+        ];
+      }),
+    findings: findings.slice(0, 30).flatMap((item) => {
       const row = asRecord(item);
       const domain = clip(row?.domain, 80);
       if (!DOMAINS.includes(domain as (typeof DOMAINS)[number])) return [];
@@ -488,6 +502,13 @@ export async function renderBuyerPdf(report: BuyerReport) {
     heading("Data gaps");
     if (assessment.dataGaps.length === 0) paragraph("None.");
     for (const item of assessment.dataGaps) paragraph(formatPdfFigures(item));
+    heading("Checklist mismatches");
+    if (assessment.mismatches.length === 0) paragraph("None.");
+    for (const item of assessment.mismatches) {
+      paragraph(
+        `${item.checklistItem}. Marked: ${item.marked || "not in hand"}. Found in: ${item.foundIn}.`,
+      );
+    }
   } else {
     paragraph(`${report.overallBand}. ${report.summary}`);
   }
