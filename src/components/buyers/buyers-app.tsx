@@ -58,6 +58,11 @@ export function BuyersApp({
     if (!preparing && (session.status !== "spent" || loadStoredResult(session.grantId))) return;
     let cancelled = false;
     async function tick() {
+      void fetch("/api/buyers/report/work", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ t: token }),
+      }).catch(() => undefined);
       const response = await fetch(`/api/buyers/report?t=${encodeURIComponent(token)}`);
       if (!response.ok || cancelled) return;
       const data = (await response.json()) as {
