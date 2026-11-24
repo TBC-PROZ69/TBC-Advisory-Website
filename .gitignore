@@ -46,3 +46,6 @@ next-env.d.ts
 
 # assessment PII
 /submissions
+
+# buyer link ledger and private uploads (local fallback)
+.data

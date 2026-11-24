@@ -61,6 +61,8 @@ A token that fails verification is rejected with a short on-page error. Nothing 
 
 The hidden `/assess` tool uses the same `RESEND_API_KEY` / `RESEND_FROM` pair. Assess still records a submission if the key is missing; the public consult form does not.
 
+The hidden Buyers Health Check (`/buyers`, not linked in the nav) is documented in [BUYERS.md](BUYERS.md). It is a separate flow from `/assess`.
+
 ## Design
 
 White and cool gray (`#F5F7FA`), near-black text, and brand blue `#126BAE`. Header and footer use the locked TBC lockup (no ring). One H1 per page. No cookie banner.
