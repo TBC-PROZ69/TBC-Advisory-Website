@@ -92,7 +92,8 @@ export async function readChunk(chunk: DocumentChunk, failedPages: string[]): Pr
     );
   }
   if (chunk.pages.length <= 1) {
-    if ((chunk.pass ?? 0) < 1) return { notes: [], again: [{ ...chunk, pass: 1 }] };
+    const pass = chunk.pass ?? 0;
+    if (pass < 2) return { notes: [], again: [{ ...chunk, pass: pass + 1 }] };
     failedPages.push(`${chunk.fileName}, ${chunk.pages[0] ?? "page"}`);
     return { notes: [], again: [] };
   }
