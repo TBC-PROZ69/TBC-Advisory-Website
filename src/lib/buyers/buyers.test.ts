@@ -15,6 +15,7 @@ import {
 import { BuyersError } from "@/lib/buyers/errors";
 import { toIntake, type IntakeDraft } from "@/lib/buyers/intake";
 import { checklistAssessment } from "@/lib/buyers/assessment";
+import { chunksOf, figuresInDocument } from "@/lib/buyers/assessment";
 import { buyersPdfFilename, formatPdfFigures, parseReportForPdf, renderBuyerPdf } from "@/lib/buyers/pdf";
 import { buildBuyerReport } from "@/lib/buyers/report";
 import {
@@ -505,6 +506,24 @@ describe("buyer pdf", () => {
       "Reserves are 41% funded, cash $250,100, deficit ($18,400).",
     );
     expect(formatPdfFigures("reserve-study.pdf, page 4")).toBe("reserve-study.pdf, page 4");
+  });
+
+  it("keeps a figure on the last page of a long document", () => {
+    const pages = Array.from({ length: 70 }, (_, index) => ({
+      label: `page ${index + 1}`,
+      text:
+        index === 69
+          ? "Transfer fee on a sale of a unit: $150. This figure is on the last page."
+          : "Owners vote in person or by limited proxy.",
+    }));
+    const doc = { fileName: "governing-ocr.pdf", pages, unread: null };
+    const chunks = chunksOf(doc);
+    expect(chunks.join("\n")).toContain("[governing-ocr.pdf, page 70]");
+    expect(chunks.join("\n")).toContain("$150");
+    const figures = figuresInDocument(doc);
+    expect(figures.some((note) => note.figure === "$150" && note.citation.endsWith("page 70"))).toBe(
+      true,
+    );
   });
 
   it("builds a branded PDF from the report already on the page", async () => {

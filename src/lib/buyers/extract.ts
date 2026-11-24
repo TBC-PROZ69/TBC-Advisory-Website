@@ -3,8 +3,6 @@ import mammoth from "mammoth";
 import { extractText, renderPageAsImage } from "unpdf";
 import * as XLSX from "xlsx";
 
-import { OCR_PAGES_PER_FILE } from "@/lib/buyers/constants";
-
 export type ExtractedPage = { label: string; text: string };
 
 export type ExtractedDocument = {
@@ -68,57 +66,54 @@ async function extractPdf(fileName: string, bytes: Uint8Array): Promise<Extracte
   return { fileName, pages, unread: null };
 }
 
-/** Reads a scan that has no text layer. Page images are not stored. */
+async function mapPool<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await task(items[index]);
+    }
+  }
+  const workers = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return results;
+}
+
+/** Reads a scan that has no text layer. Page images are not stored. A page budget of 0 reads every page. */
 export async function ocrScannedPdf(
   fileName: string,
   bytes: Uint8Array,
   pageBudget: number,
   onlyPages?: number[],
 ) {
-  const cap = Math.max(0, Math.min(OCR_PAGES_PER_FILE, pageBudget));
-  if (cap === 0) {
+  let pageNumbers: number[] = [];
+  if (onlyPages && onlyPages.length > 0) {
+    pageNumbers = onlyPages.filter((page) => page > 0);
+  } else {
+    try {
+      const probe = await extractText(bytes, { mergePages: false });
+      const total = probe.totalPages || 0;
+      pageNumbers = Array.from({ length: total }, (_, index) => index + 1);
+    } catch {
+      pageNumbers = [];
+    }
+  }
+  if (pageBudget > 0) pageNumbers = pageNumbers.slice(0, pageBudget);
+  if (pageNumbers.length === 0) {
     return {
       doc: {
         fileName,
         pages: [],
-        unread: `${fileName} is scanned without text. No OCR pages were left in this report's cap.`,
+        unread: `${fileName} is scanned without text, and no page image could be prepared.`,
       } satisfies ExtractedDocument,
       pagesSent: 0,
     };
   }
-  const pages: ExtractedPage[] = [];
-  let total = cap;
-  let pageNumbers: number[] = [];
-  if (onlyPages && onlyPages.length > 0) {
-    pageNumbers = onlyPages.filter((page) => page > 0).slice(0, cap);
-    total = pageNumbers.length;
-  } else {
+  const read = await mapPool(pageNumbers, 4, async (pageNumber) => {
     try {
-      const probe = await extractText(bytes, { mergePages: false });
-      total = Math.min(cap, probe.totalPages || cap);
-    } catch {
-      total = cap;
-    }
-    pageNumbers = Array.from({ length: total }, (_, index) => index + 1);
-  }
-  for (const pageNumber of pageNumbers) {
-    let image: ArrayBuffer;
-    try {
-      image = await renderPageAsImage(bytes, pageNumber, { scale: 1.25 });
-    } catch {
-      return {
-        doc: {
-          fileName,
-          pages,
-          unread:
-            pages.length > 0
-              ? `${fileName}: OCR stopped after page ${pages.length} because a page image could not be prepared.`
-              : `${fileName} is scanned without text. A page image could not be prepared, so it could not be read.`,
-        } satisfies ExtractedDocument,
-        pagesSent: pages.length,
-      };
-    }
-    try {
+      const image = await renderPageAsImage(bytes, pageNumber, { scale: 1.25 });
       const result = await generateText({
         model: "openai/gpt-5-mini",
         messages: [
@@ -135,33 +130,20 @@ export async function ocrScannedPdf(
         ],
       });
       const text = clip(result.text ?? "");
-      if (text) pages.push({ label: `OCR page ${pageNumber}`, text });
+      return text ? { label: `OCR page ${pageNumber}`, text } : null;
     } catch {
-      return {
-        doc: {
-          fileName,
-          pages,
-          unread: `${fileName}: OCR stopped after ${pages.length} page${pages.length === 1 ? "" : "s"}. The vision read did not finish. No page image was kept.`,
-        } satisfies ExtractedDocument,
-        pagesSent: pageNumber,
-      };
+      return null;
     }
-  }
+  });
+  const pages = read.filter((page): page is ExtractedPage => page !== null);
   let unread: string | null = null;
-  if (!onlyPages?.length) {
-    try {
-      const probe = await extractText(bytes, { mergePages: false });
-      if ((probe.totalPages || 0) > total) {
-        unread = `${fileName}: only the first ${total} scanned pages were read by OCR. Later pages were not sent.`;
-      }
-    } catch {
-      unread = null;
-    }
+  if (pages.length < pageNumbers.length) {
+    unread = `${fileName}: ${pages.length} of ${pageNumbers.length} image-only pages were read. A page image was not kept.`;
   }
   if (pages.length === 0) {
     unread = `${fileName} is scanned without text, and OCR returned no words.`;
   }
-  return { doc: { fileName, pages, unread } satisfies ExtractedDocument, pagesSent: total };
+  return { doc: { fileName, pages, unread } satisfies ExtractedDocument, pagesSent: pageNumbers.length };
 }
 
 async function extractDocx(fileName: string, bytes: Uint8Array): Promise<ExtractedDocument> {

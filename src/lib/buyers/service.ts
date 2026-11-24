@@ -7,8 +7,6 @@ import {
   MAX_FILE_BYTES,
   MAX_FILES,
   MAX_TOTAL_BYTES,
-  OCR_PAGES_PER_FILE,
-  OCR_PAGES_PER_REPORT,
   ONE_TIME_LINK_DAYS,
   ONE_TIME_PRICE_USD,
 } from "@/lib/buyers/constants";
@@ -600,11 +598,10 @@ export async function commitBuyerReport(input: {
         monthlyCap,
       });
       const extracted = [];
-      let ocrBudget = OCR_PAGES_PER_REPORT;
       for (const file of stored) {
         const bytes = (await readPrivateBytes(file.storageKey)) ?? new Uint8Array();
         let doc = await extractDocument(file.fileName, bytes);
-        if (bytes.byteLength > 0 && ocrBudget > 0) {
+        if (bytes.byteLength > 0) {
           const blankPages = doc.pages
             .map((page) => {
               const match = /^page (\d+)$/.exec(page.label);
@@ -615,10 +612,9 @@ export async function commitBuyerReport(input: {
             const ocr = await ocrScannedPdf(
               file.fileName,
               bytes,
-              Math.min(OCR_PAGES_PER_FILE, ocrBudget),
+              0,
               blankPages.length > 0 ? blankPages : undefined,
             );
-            ocrBudget -= ocr.pagesSent;
             if (blankPages.length > 0) {
               doc = {
                 fileName: doc.fileName,

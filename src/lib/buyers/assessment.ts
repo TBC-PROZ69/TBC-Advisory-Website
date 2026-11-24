@@ -102,12 +102,14 @@ export function checklistAssessment(
   };
 }
 
-function chunksOf(doc: ExtractedDocument) {
+const CHUNK_CHARS = 7000;
+
+export function chunksOf(doc: ExtractedDocument) {
   const chunks: string[] = [];
   let current = `${doc.fileName}\n`;
   for (const page of doc.pages) {
     const block = `[${doc.fileName}, ${page.label}]\n${page.text}\n`;
-    if (current.length + block.length > 7000 && current.length > doc.fileName.length + 1) {
+    if (current.length + block.length > CHUNK_CHARS && current.length > doc.fileName.length + 1) {
       chunks.push(current);
       current = `${doc.fileName}\n${block}`;
     } else {
@@ -115,7 +117,75 @@ function chunksOf(doc: ExtractedDocument) {
     }
   }
   if (current.trim()) chunks.push(current);
-  return chunks.slice(0, 3);
+  return chunks;
+}
+
+export type MappedNote = { point: string; citation: string; figure: string };
+
+/** Every money, percent, and day-count line, with its page, so a later page is not dropped. */
+export function figuresInDocument(doc: ExtractedDocument): MappedNote[] {
+  const notes: MappedNote[] = [];
+  for (const page of doc.pages) {
+    for (const line of page.text.split(/\n/)) {
+      const trimmed = line.replace(/\s+/g, " ").trim();
+      const money = trimmed.match(/\$\s?\d[\d,]*(?:\.\d+)?/);
+      const percent = trimmed.match(/\d+(?:\.\d+)?\s*(?:percent|%)/i);
+      const days = trimmed.match(/\b\d+\s+days\b/i);
+      const figure = money?.[0] ?? percent?.[0] ?? days?.[0];
+      if (!figure) continue;
+      notes.push({
+        point: trimmed.slice(0, 400),
+        citation: `${doc.fileName}, ${page.label}`,
+        figure,
+      });
+    }
+  }
+  return notes;
+}
+
+async function mapPool<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await task(items[index]);
+    }
+  }
+  const workers = Math.min(Math.max(limit, 1), Math.max(items.length, 1));
+  if (items.length === 0) return results;
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return results;
+}
+
+function digits(value: string) {
+  return value.replace(/[^\d.]/g, "");
+}
+
+function mergeFigures(
+  keyNumbers: BuyerAssessment["keyNumbers"],
+  notes: MappedNote[],
+) {
+  for (const note of notes) {
+    const value = note.figure.replace(/[“”"]/g, "").replace(/\$\s+/, "$").trim();
+    const amount = digits(value);
+    if (!amount) continue;
+    const citation = note.citation;
+    const comma = citation.lastIndexOf(", ");
+    const source = comma > 0 ? citation.slice(0, comma) : citation;
+    const page = comma > 0 ? citation.slice(comma + 2) : "";
+    const already = keyNumbers.some(
+      (row) => digits(row.value) === amount && row.page.replace(/\s+/g, " ").includes(page),
+    );
+    if (already) continue;
+    keyNumbers.push({
+      label: plain(note.point).slice(0, 160),
+      value,
+      source: plain(source),
+      page: plain(page),
+    });
+  }
 }
 
 const RULES = [
@@ -136,23 +206,27 @@ export async function assessDocuments(
   if (readable.length === 0) return checklistAssessment(report, unread);
 
   try {
-    const notes: { point: string; citation: string; figure: string }[] = [];
-    for (const doc of readable) {
-      for (const chunk of chunksOf(doc)) {
+    const chunks = readable.flatMap((doc) => chunksOf(doc));
+    const mapped = await mapPool(chunks, 6, async (chunk) => {
+      try {
         const result = await generateText({
           model: "openai/gpt-5-mini",
           output: Output.object({ schema: chunkSchema }),
           system: RULES,
-          prompt: `List only facts that appear in this excerpt. If there is no number, return an empty notes list.\n\n${chunk}`,
+          prompt: `List every dollar amount, percent, day count, and vote rule in this excerpt. Include small fees. One note per figure. The citation is the file name and page from the bracket. If there is no number, return an empty notes list.\n\n${chunk}`,
         });
-        notes.push(...(result.output?.notes ?? []));
+        return result.output?.notes ?? [];
+      } catch {
+        return [];
       }
-    }
+    });
+    const pageNotes = readable.flatMap((doc) => figuresInDocument(doc));
+    const notes = [...mapped.flat(), ...pageNotes];
     const result = await generateText({
       model: "openai/gpt-5-mini",
       output: Output.object({ schema: assessmentSchema }),
       system: RULES,
-      prompt: JSON.stringify({
+      prompt: `Write the report from these extracted notes. Put every figure into keyNumbers, including a small fee on a late page. Do not drop a note because the amount is small.\n\n${JSON.stringify({
         association: report.associationName,
         unit: report.unitAddress,
         buyer: report.personName,
@@ -160,20 +234,22 @@ export async function assessDocuments(
         doesNotApply: report.notApplicable.map((item) => item.title),
         unread,
         notes,
-      }),
+      })}`,
     });
     const output = result.output;
     if (!output) return checklistAssessment(report, unread);
+    const keyNumbers = output.keyNumbers.map((row) => ({
+      label: plain(row.label),
+      value: plain(row.value),
+      source: plain(row.source),
+      page: plain(row.page),
+    }));
+    mergeFigures(keyNumbers, pageNotes);
     return {
       overallRating: output.overallRating,
       bottomLine: plain(output.bottomLine),
       scorecard: output.scorecard.map((row) => ({ ...row, note: plain(row.note) })),
-      keyNumbers: output.keyNumbers.map((row) => ({
-        label: plain(row.label),
-        value: plain(row.value),
-        source: plain(row.source),
-        page: plain(row.page),
-      })),
+      keyNumbers,
       findings: output.findings.map((row) => ({
         domain: row.domain,
         whatItSays: plain(row.whatItSays),

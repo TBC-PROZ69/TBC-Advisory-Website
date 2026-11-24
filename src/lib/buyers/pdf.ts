@@ -1,10 +1,7 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 
-import type { BuyerAssessment } from "@/lib/buyers/assessment";
-import { DOMAINS, RATINGS } from "@/lib/buyers/assessment";
+import { DOMAINS, RATINGS, type BuyerAssessment } from "@/lib/buyers/assessment";
+import { LOGO_LOCKUP_PNG } from "@/lib/buyers/logo-lockup";
 import { BuyersError } from "@/lib/buyers/errors";
 import type { BuyerReport } from "@/lib/buyers/report";
 import type { BuyerBand } from "@/lib/buyers/types";
@@ -251,8 +248,8 @@ function preparedOn(createdAt: string) {
   }).format(new Date(createdAt));
 }
 
-async function logoPng() {
-  return readFile(path.join(process.cwd(), "public/brand/tbc-advisory-logo-lockup.png"));
+function logoPng() {
+  return Buffer.from(LOGO_LOCKUP_PNG, "base64");
 }
 
 export async function renderBuyerPdf(report: BuyerReport) {
