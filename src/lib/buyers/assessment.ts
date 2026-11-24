@@ -202,7 +202,7 @@ export function curateKeyNumbers(
   return kept.slice(0, 20);
 }
 
-export type DocumentChunk = { fileName: string; pages: string[]; text: string };
+export type DocumentChunk = { fileName: string; pages: string[]; text: string; pass?: number };
 
 /** Each page is placed in exactly one chunk. A page is never split. */
 export function chunksOf(doc: ExtractedDocument): DocumentChunk[] {
@@ -233,7 +233,7 @@ export function coverageGaps(doc: ExtractedDocument, chunks: DocumentChunk[]) {
 
 export type MappedNote = { point: string; citation: string; figure: string };
 
-async function mapPool<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>) {
+export async function mapPool<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>) {
   const results = new Array<R>(items.length);
   let next = 0;
   async function worker() {
@@ -272,12 +272,13 @@ function decisionNote(note: MappedNote) {
 }
 
 function chunkPrompt(text: string) {
-  return `List only decision figures in this excerpt: dollar amounts, percents, day or weight limits, approval periods, and fees. At most 8 notes. figure is the value itself, such as $150, 41%, or 180 days. citation is the file and page from the bracket. If the excerpt has no decision figure, return an empty notes list. Do not note page headers, page numbers, or the absence of a figure.\n\n${text}`;
+  return `List only decision figures in this excerpt: dollar amounts, percents, day limits, weight limits, how many pets, how many times a unit may be leased, approval periods, fees, and how many units are delinquent. At most 8 notes. figure is the value itself, such as $150, 41%, 180 days, or 25 pounds. citation is the file and page from the bracket. If the excerpt has no decision figure, return an empty notes list. Do not note page headers, page numbers, or the absence of a figure.\n\n${text}`;
 }
 
 async function callChunk(chunk: DocumentChunk) {
   const result = await generateText({
     model: "openai/gpt-5-mini",
+    maxRetries: 1,
     output: Output.object({ schema: chunkSchema }),
     system: RULES,
     prompt: chunkPrompt(chunk.text),
@@ -295,10 +296,12 @@ function pageSlice(chunk: DocumentChunk, page: string): DocumentChunk {
   return { fileName: chunk.fileName, pages: [page], text: `${chunk.fileName}\n${marker}${body}` };
 }
 
-/** A multi-page chunk that fails is retried as one page at a time. That is the failure mode of pages 8-14: one oversized structured reply. */
-export async function readChunk(chunk: DocumentChunk, failedPages: string[]) {
+export type ChunkRead = { notes: MappedNote[]; again: DocumentChunk[] };
+
+/** A multi-page chunk that fails is returned as single pages for a later batch. Retrying inside the same burst is what dropped pages 8-14: the provider was already failing. */
+export async function readChunk(chunk: DocumentChunk, failedPages: string[]): Promise<ChunkRead> {
   try {
-    return await callChunk(chunk);
+    return { notes: await callChunk(chunk), again: [] };
   } catch (error) {
     console.error(
       "Buyers chunk failed",
@@ -308,39 +311,14 @@ export async function readChunk(chunk: DocumentChunk, failedPages: string[]) {
     );
   }
   if (chunk.pages.length <= 1) {
-    try {
-      return await callChunk(chunk);
-    } catch (error) {
-      console.error(
-        "Buyers page failed",
-        chunk.fileName,
-        chunk.pages[0],
-        error instanceof Error ? error.name : "error",
-      );
-      failedPages.push(`${chunk.fileName}, ${chunk.pages[0] ?? "page"}`);
-      return [];
-    }
+    if ((chunk.pass ?? 0) < 1) return { notes: [], again: [{ ...chunk, pass: 1 }] };
+    failedPages.push(`${chunk.fileName}, ${chunk.pages[0] ?? "page"}`);
+    return { notes: [], again: [] };
   }
-  const notes: MappedNote[] = [];
-  for (const page of chunk.pages) {
-    const single = pageSlice(chunk, page);
-    try {
-      notes.push(...(await callChunk(single)));
-    } catch (error) {
-      console.error(
-        "Buyers page failed",
-        chunk.fileName,
-        page,
-        error instanceof Error ? error.name : "error",
-      );
-      try {
-        notes.push(...(await callChunk(single)));
-      } catch {
-        failedPages.push(`${chunk.fileName}, ${page}`);
-      }
-    }
-  }
-  return notes;
+  return {
+    notes: [],
+    again: chunk.pages.map((page) => ({ ...pageSlice(chunk, page), pass: 1 })),
+  };
 }
 
 export async function assessDocuments(
@@ -367,8 +345,15 @@ export async function assessDocuments(
       return docChunks;
     });
     const failedPages: string[] = [];
-    const mapped = await mapPool(chunks, 4, (chunk) => readChunk(chunk, failedPages));
-    return synthesizeReport(report, mapped.flat(), failedPages, unread);
+    const pending = [...chunks];
+    const notes: MappedNote[] = [];
+    while (pending.length > 0) {
+      const batch = pending.splice(0, 4);
+      const mapped = await mapPool(batch, 3, (chunk) => readChunk(chunk, failedPages));
+      notes.push(...mapped.flatMap((item) => item.notes));
+      pending.push(...mapped.flatMap((item) => item.again));
+    }
+    return synthesizeReport(report, notes, failedPages, unread);
   } catch (error) {
     const fallback = checklistAssessment(report, unread);
     fallback.unavailable =
@@ -399,7 +384,7 @@ export async function synthesizeReport(
       model: "openai/gpt-5-mini",
       output: Output.object({ schema: assessmentSchema }),
       system: RULES,
-      prompt: `Write the report from the notes the map step extracted. keyNumbers is a curated list of at most 20 real decision figures, deduplicated. Include a row only when a note states the figure: operating budget, budgeted surplus, year-to-date result compared with the budget as ($18,400) vs $12,000 budgeted, reserve cash, recommended reserve balance, percent funded, insurance cost, insurance share of the budget, legal spend compared with its budget, an unfunded capital item, a special assessment, a delinquency total, and a fee. Write day counts as 180 days, never $180 days. Do not include page headers, page numbers, or a row whose value is not in the documents. Put absences in dataGaps once, not in keyNumbers. ${RATING_RULE}\n\nA checklist item marked not in hand is not missing when an attached file's notes already contain that information. Put that on mismatches and do not call it missing in Documentation completeness or dataGaps.\n\n${JSON.stringify({
+      prompt: `Write the report from the notes the map step extracted. keyNumbers is a curated list of at most 20 real decision figures, deduplicated. Include a row only when a note states the figure: operating budget, budgeted surplus, year-to-date result compared with the budget as ($18,400) vs $12,000 budgeted, reserve cash, recommended reserve balance, percent funded, insurance cost, insurance share of the budget, legal spend compared with its budget, an unfunded capital item, a special assessment, a delinquency total and the number of units, a fee, a lease day limit, a pet count or weight limit, and an approval period. Write day counts as 180 days, never $180 days. Do not include page headers, page numbers, or a row whose value is not in the documents. Put absences in dataGaps once, not in keyNumbers. ${RATING_RULE}\n\nA checklist item marked not in hand is not missing when an attached file's notes already contain that information. Put that on mismatches and do not call it missing in Documentation completeness or dataGaps.\n\n${JSON.stringify({
         association: report.associationName,
         unit: report.unitAddress,
         buyer: report.personName,

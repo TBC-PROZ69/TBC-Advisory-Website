@@ -6,6 +6,7 @@ import { monthKey } from "@/lib/buyers/service";
 import {
   chunksOf,
   coverageGaps,
+  mapPool,
   readChunk,
   synthesizeReport,
   type DocumentChunk,
@@ -25,7 +26,7 @@ import type { TokenPayload } from "@/lib/buyers/token";
 import { newId } from "@/lib/buyers/token";
 import type { SlotChoice } from "@/lib/buyers/types";
 
-const BATCH = 8;
+const BATCH = 4;
 
 export type BuyerJob = {
   version: 1;
@@ -200,8 +201,10 @@ export async function advanceBuyerJob(grantId: string) {
     if (job.phase === "map") {
       const batch = job.chunks.slice(job.cursor, job.cursor + BATCH);
       const failed: string[] = [];
-      const mapped = await Promise.all(batch.map((chunk) => readChunk(chunk, failed)));
-      job.notes.push(...mapped.flat());
+      const mapped = await mapPool(batch, 3, (chunk) => readChunk(chunk, failed));
+      job.notes.push(...mapped.flatMap((item) => item.notes));
+      const again = mapped.flatMap((item) => item.again);
+      if (again.length > 0) job.chunks.splice(job.cursor + batch.length, 0, ...again);
       job.failedPages.push(...failed);
       job.cursor += batch.length;
       if (job.cursor >= job.chunks.length) job.phase = "reduce";
