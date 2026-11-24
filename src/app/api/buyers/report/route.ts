@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import {
   loadBuyerSession,
@@ -7,7 +7,6 @@ import {
   spentCookieOptions,
   spentIdsFromCookie,
 } from "@/lib/buyers/access";
-import { sendBuyerReport } from "@/lib/buyers/email";
 import { BuyersError } from "@/lib/buyers/errors";
 import {
   parseChoices,
@@ -15,11 +14,8 @@ import {
   parseDeclaredFiles,
   parseNotes,
 } from "@/lib/buyers/payload";
-import {
-  commitBuyerReport,
-  latestReport,
-  markReportEmailed,
-} from "@/lib/buyers/service";
+import { advanceBuyerJob, readBuyerJob, startBuyerJob } from "@/lib/buyers/job";
+import { latestReport, markReportEmailed } from "@/lib/buyers/service";
 import { allowRequest, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -40,6 +36,17 @@ function fail(error: unknown) {
   return json({ error: "The report could not be prepared." }, 500);
 }
 
+function kick(request: NextRequest, token: string) {
+  const url = new URL("/api/buyers/report/work", request.url);
+  after(() => {
+    void fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ t: token }),
+    });
+  });
+}
+
 function tokenFrom(value: unknown) {
   if (typeof value !== "string" || value.length < 20 || value.length > 4000) {
     throw new BuyersError("This link is not valid.", 401, "invalid");
@@ -49,7 +56,7 @@ function tokenFrom(value: unknown) {
 
 export async function GET(request: NextRequest) {
   try {
-    if (!allowRequest(`buyers-report-get:${clientIp(request)}`, 60, 15 * 60 * 1000)) {
+    if (!allowRequest(`buyers-report-get:${clientIp(request)}`, 400, 15 * 60 * 1000)) {
       return json({ error: "Too many requests. Wait a few minutes and try again." }, 429);
     }
     const token = tokenFrom(request.nextUrl.searchParams.get("t"));
@@ -61,8 +68,13 @@ export async function GET(request: NextRequest) {
       return json({ error: "This link is not active.", reason: session.reason }, 401);
     }
     const found = await latestReport(session.grantId);
-    if (!found) return json({ error: "No report is stored for this link." }, 404);
-    return json(found);
+    if (found) return json(found);
+    const job = await readBuyerJob(session.grantId);
+    if (job && job.phase !== "ready") {
+      if (job.runningUntil <= Date.now()) kick(request, token);
+      return json({ status: "preparing", done: job.cursor, total: job.chunks.length });
+    }
+    return json({ error: "No report is stored for this link." }, 404);
   } catch (error) {
     return fail(error);
   }
@@ -94,7 +106,7 @@ export async function POST(request: NextRequest) {
     const notes = parseNotes(body.notes);
     const declaredFiles = parseDeclaredFiles(body.files);
     const consent = body.consent === true;
-    const { report, kind } = await commitBuyerReport({
+    const started = await startBuyerJob({
       payload: session.payload,
       intake,
       notes,
@@ -103,14 +115,15 @@ export async function POST(request: NextRequest) {
       spentIds: spentIdsFromCookie(cookie),
       declaredFiles,
     });
-    const emailed = await sendBuyerReport(report);
-    if (emailed) await markReportEmailed(report.id);
+    kick(request, token);
     const response = json({
-      report,
-      emailed,
-      linkStatus: kind === "one-time" ? "spent" : "active",
+      status: "preparing",
+      done: started.done,
+      total: started.total,
+      emailed: false,
+      linkStatus: session.payload.kind === "one-time" ? "spent" : "active",
     });
-    if (kind === "one-time") {
+    if (session.payload.kind === "one-time") {
       response.cookies.set(
         SPENT_COOKIE,
         sealSpentCookie(cookie, session.grantId),

@@ -63,13 +63,15 @@ export type BuyerAssessment = z.infer<typeof assessmentSchema> & {
 };
 
 const chunkSchema = z.object({
-  notes: z.array(
-    z.object({
-      point: z.string(),
-      citation: z.string(),
-      figure: z.string(),
-    }),
-  ),
+  notes: z
+    .array(
+      z.object({
+        point: z.string(),
+        citation: z.string(),
+        figure: z.string(),
+      }),
+    )
+    .max(8),
 });
 
 function plain(value: string) {
@@ -112,6 +114,94 @@ export function checklistAssessment(
 
 const CHUNK_CHARS = 12000;
 
+export const RATING_RULE = "The overall rating is the highest rating on the scorecard.";
+
+const RATING_RANK: Record<(typeof RATINGS)[number], number> = {
+  Low: 0,
+  Moderate: 1,
+  Elevated: 2,
+  High: 3,
+  Critical: 4,
+};
+
+export function highestRating(
+  scorecard: BuyerAssessment["scorecard"],
+): (typeof RATINGS)[number] {
+  let best: (typeof RATINGS)[number] = "Low";
+  for (const row of scorecard) {
+    if (RATING_RANK[row.rating] > RATING_RANK[best]) best = row.rating;
+  }
+  return best;
+}
+
+/** Drop running headers and filler page lines before a page is placed in a chunk. */
+export function stripPageChrome(text: string) {
+  return text
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false;
+      if (/^page\s+\d+(\s+of\s+\d+)?$/i.test(line)) return false;
+      if (/\bpage\s+\d+\s+of\s+\d+\b/i.test(line) && line.length < 100) return false;
+      if (
+        /^page\s+\d+\s+of\s+the\b/i.test(line) &&
+        !/\$|percent|\bdays?\b|\bpounds?\b|\bfee\b/i.test(line)
+      ) {
+        return false;
+      }
+      if (/^palm sample condominium\b/i.test(line) && /\bpage\s+\d+\b/i.test(line)) return false;
+      return true;
+    })
+    .join("\n");
+}
+
+function noiseRow(row: { label: string; value: string }) {
+  const text = `${row.label} ${row.value}`.toLowerCase();
+  if (/not in the documents/.test(text)) return true;
+  if (/page\s+\d+\s+of\s+\d+/.test(text)) return true;
+  if (/page header|document page indicator/.test(text)) return true;
+  if (/owners receive written notice/.test(text)) return true;
+  if (!row.value.trim() || row.value.trim().toLowerCase() === "none") return true;
+  return false;
+}
+
+function cleanFigureValue(label: string, value: string) {
+  let next = value.replace(/[“”"]/g, "").replace(/\s+/g, " ").trim();
+  next = next.replace(/\$(\d[\d,]*)(\s+days?\b)/gi, "$1$2");
+  if (/\bdays?\b/i.test(label) || /\bdays?\b/i.test(next)) {
+    next = next.replace(/^\$/, "");
+  }
+  return next;
+}
+
+/** Curated decision figures from the reduce step. Not a second reading of the documents. */
+export function curateKeyNumbers(
+  rows: BuyerAssessment["keyNumbers"],
+): BuyerAssessment["keyNumbers"] {
+  const kept: BuyerAssessment["keyNumbers"] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (noiseRow(row)) continue;
+    const value = cleanFigureValue(row.label, row.value);
+    const key = `${row.label.toLowerCase()}|${value.toLowerCase()}|${row.page.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push({ ...row, value });
+  }
+  const deficit = kept.find((row) => /year-to-date|ytd|deficit/i.test(row.label));
+  const surplus = kept.find((row) => /budgeted (operating )?surplus/i.test(row.label));
+  if (deficit && surplus && !/\bvs\b/.test(deficit.value)) {
+    const amount = deficit.value.replace(/[()$]/g, "").replace(/^-/, "").trim();
+    const negative =
+      deficit.value.includes("(") ||
+      deficit.value.trim().startsWith("-") ||
+      /deficit/i.test(deficit.label);
+    deficit.value = `${negative ? `($${amount})` : `$${amount}`} vs ${surplus.value} budgeted`;
+  }
+  kept.sort((left, right) => figureRank(left) - figureRank(right));
+  return kept.slice(0, 20);
+}
+
 export type DocumentChunk = { fileName: string; pages: string[]; text: string };
 
 /** Each page is placed in exactly one chunk. A page is never split. */
@@ -119,7 +209,7 @@ export function chunksOf(doc: ExtractedDocument): DocumentChunk[] {
   const chunks: DocumentChunk[] = [];
   let current: DocumentChunk = { fileName: doc.fileName, pages: [], text: `${doc.fileName}\n` };
   for (const page of doc.pages) {
-    const block = `[${doc.fileName}, ${page.label}]\n${page.text}\n`;
+    const block = `[${doc.fileName}, ${page.label}]\n${stripPageChrome(page.text)}\n`;
     if (current.pages.length > 0 && current.text.length + block.length > CHUNK_CHARS) {
       chunks.push(current);
       current = { fileName: doc.fileName, pages: [], text: `${doc.fileName}\n` };
@@ -169,10 +259,89 @@ const RULES = [
   "You prepare checklists and guidance for a Florida condominium or homeowners association buyer.",
   "Use only the text provided. Never invent a dollar amount, percent, date, or name.",
   "Copy figures from the text, then write dollars as $250,100, negative amounts as ($18,400), and percents as 41%. Do not put quotation marks around figures or sentences. Cite the file name and page or sheet.",
-  "If a figure is not in the text, leave it out and say it was not in the documents.",
+  "If a figure is not in the text, omit it. Never write a row whose value is not in the documents.",
   "Do not use em dashes. Do not use the word templates.",
   "Be specific about reserves, budget variance, insurance share of the budget, legal spend, and special assessments when those words and numbers are in the text.",
 ].join(" ");
+
+function decisionNote(note: MappedNote) {
+  const text = `${note.point} ${note.figure}`.toLowerCase();
+  if (/not in the documents/.test(text)) return false;
+  if (/page\s+\d+\s+of\s+\d+/.test(text)) return false;
+  return Boolean(note.figure.trim());
+}
+
+function chunkPrompt(text: string) {
+  return `List only decision figures in this excerpt: dollar amounts, percents, day or weight limits, approval periods, and fees. At most 8 notes. figure is the value itself, such as $150, 41%, or 180 days. citation is the file and page from the bracket. If the excerpt has no decision figure, return an empty notes list. Do not note page headers, page numbers, or the absence of a figure.\n\n${text}`;
+}
+
+async function callChunk(chunk: DocumentChunk) {
+  const result = await generateText({
+    model: "openai/gpt-5-mini",
+    output: Output.object({ schema: chunkSchema }),
+    system: RULES,
+    prompt: chunkPrompt(chunk.text),
+  });
+  return result.output?.notes ?? [];
+}
+
+function pageSlice(chunk: DocumentChunk, page: string): DocumentChunk {
+  const marker = `[${chunk.fileName}, ${page}]`;
+  const start = chunk.text.indexOf(marker);
+  if (start < 0) return { ...chunk, pages: [page], text: `${chunk.fileName}\n${marker}\n` };
+  const rest = chunk.text.slice(start + marker.length);
+  const next = rest.indexOf(`\n[${chunk.fileName}, `);
+  const body = next < 0 ? rest : rest.slice(0, next);
+  return { fileName: chunk.fileName, pages: [page], text: `${chunk.fileName}\n${marker}${body}` };
+}
+
+/** A multi-page chunk that fails is retried as one page at a time. That is the failure mode of pages 8-14: one oversized structured reply. */
+export async function readChunk(chunk: DocumentChunk, failedPages: string[]) {
+  try {
+    return await callChunk(chunk);
+  } catch (error) {
+    console.error(
+      "Buyers chunk failed",
+      chunk.fileName,
+      chunk.pages.join(", "),
+      error instanceof Error ? error.name : "error",
+    );
+  }
+  if (chunk.pages.length <= 1) {
+    try {
+      return await callChunk(chunk);
+    } catch (error) {
+      console.error(
+        "Buyers page failed",
+        chunk.fileName,
+        chunk.pages[0],
+        error instanceof Error ? error.name : "error",
+      );
+      failedPages.push(`${chunk.fileName}, ${chunk.pages[0] ?? "page"}`);
+      return [];
+    }
+  }
+  const notes: MappedNote[] = [];
+  for (const page of chunk.pages) {
+    const single = pageSlice(chunk, page);
+    try {
+      notes.push(...(await callChunk(single)));
+    } catch (error) {
+      console.error(
+        "Buyers page failed",
+        chunk.fileName,
+        page,
+        error instanceof Error ? error.name : "error",
+      );
+      try {
+        notes.push(...(await callChunk(single)));
+      } catch {
+        failedPages.push(`${chunk.fileName}, ${page}`);
+      }
+    }
+  }
+  return notes;
+}
 
 export async function assessDocuments(
   report: BuyerReport,
@@ -198,32 +367,26 @@ export async function assessDocuments(
       return docChunks;
     });
     const failedPages: string[] = [];
-    const mapped = await mapPool(chunks, 8, async (chunk) => {
-      const prompt = `Read this excerpt and list every figure and restriction it states. One note per item. Put the number or limit in figure, such as $150, 41%, or 180 days. The citation is the file name and page from the bracket. Include a small fee on a late page. If there is no figure or rule, return an empty notes list.\n\n${chunk.text}`;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          const result = await generateText({
-            model: "openai/gpt-5-mini",
-            output: Output.object({ schema: chunkSchema }),
-            system: RULES,
-            prompt,
-          });
-          return result.output?.notes ?? [];
-        } catch (error) {
-          if (attempt === 0) continue;
-          console.error(
-            "Buyers chunk failed",
-            chunk.fileName,
-            chunk.pages.join(", "),
-            error instanceof Error ? error.name : "error",
-          );
-          failedPages.push(...chunk.pages.map((page) => `${chunk.fileName}, ${page}`));
-          return [];
-        }
-      }
-      return [];
-    });
-    const notes = mapped.flat();
+    const mapped = await mapPool(chunks, 4, (chunk) => readChunk(chunk, failedPages));
+    return synthesizeReport(report, mapped.flat(), failedPages, unread);
+  } catch (error) {
+    const fallback = checklistAssessment(report, unread);
+    fallback.unavailable =
+      "Document analysis did not finish. The uploaded files and extracted text were deleted.";
+    fallback.dataGaps.push(
+      `Analysis stopped (${error instanceof Error ? error.name : "error"}). No document text was kept.`,
+    );
+    return fallback;
+  }
+}
+
+export async function synthesizeReport(
+  report: BuyerReport,
+  notes: MappedNote[],
+  failedPages: string[],
+  unread: string[],
+) {
+  try {
     const attached = report.documents
       .filter((item) => item.files.length > 0)
       .map((item) => ({
@@ -236,7 +399,7 @@ export async function assessDocuments(
       model: "openai/gpt-5-mini",
       output: Output.object({ schema: assessmentSchema }),
       system: RULES,
-      prompt: `Write the report from the notes the map step extracted. keyNumbers must include each of these when a note states it: operating budget, budgeted surplus or deficit, year-to-date result compared with budget, reserve cash, recommended reserve balance, percent funded, insurance cost, insurance share of the budget, legal spend compared with its budget, unfunded capital item, special assessment, delinquency total, and any fee. One row per figure, with the note's file and page. Do not leave the table as a single voting row when money figures were extracted. Do not invent a figure that is not in the notes.\n\nA checklist item marked not in hand is not missing when an attached file's notes already contain that information. Put that on mismatches and do not call it missing in Documentation completeness or dataGaps. Example: the checklist says the budget was not provided, but financial-report.pdf states the adopted budget.\n\n${JSON.stringify({
+      prompt: `Write the report from the notes the map step extracted. keyNumbers is a curated list of at most 20 real decision figures, deduplicated. Include a row only when a note states the figure: operating budget, budgeted surplus, year-to-date result compared with the budget as ($18,400) vs $12,000 budgeted, reserve cash, recommended reserve balance, percent funded, insurance cost, insurance share of the budget, legal spend compared with its budget, an unfunded capital item, a special assessment, a delinquency total, and a fee. Write day counts as 180 days, never $180 days. Do not include page headers, page numbers, or a row whose value is not in the documents. Put absences in dataGaps once, not in keyNumbers. ${RATING_RULE}\n\nA checklist item marked not in hand is not missing when an attached file's notes already contain that information. Put that on mismatches and do not call it missing in Documentation completeness or dataGaps.\n\n${JSON.stringify({
         association: report.associationName,
         unit: report.unitAddress,
         buyer: report.personName,
@@ -258,49 +421,43 @@ export async function assessDocuments(
         ...failedPages.map((page) => `${page} was not read after one retry.`),
         "The report synthesis did not finish. Figures below are the ones each chunk returned.",
       ]);
-      for (const note of notes) {
-        const figure = plain(note.figure);
-        if (!figure) continue;
-        const citation = plain(note.citation);
-        const comma = citation.lastIndexOf(", ");
-        fallback.keyNumbers.push({
-          label: plain(note.point).slice(0, 160),
-          value: figure,
-          source: comma > 0 ? citation.slice(0, comma) : citation,
-          page: comma > 0 ? citation.slice(comma + 2) : "",
-        });
-      }
+      fallback.keyNumbers = curateKeyNumbers(
+        notes.filter(decisionNote).map((note) => {
+          const citation = plain(note.citation);
+          const comma = citation.lastIndexOf(", ");
+          return {
+            label: plain(note.point).slice(0, 160),
+            value: plain(note.figure),
+            source: comma > 0 ? citation.slice(0, comma) : citation,
+            page: comma > 0 ? citation.slice(comma + 2) : "",
+          };
+        }),
+      );
       return fallback;
     }
-    const keyNumbers = output.keyNumbers.map((row) => ({
-      label: plain(row.label),
-      value: plain(row.value),
-      source: plain(row.source),
-      page: plain(row.page),
-    }));
-    for (const note of notes) {
-      const figure = plain(note.figure);
-      if (!figure) continue;
-      const citation = plain(note.citation);
-      const comma = citation.lastIndexOf(", ");
-      const source = comma > 0 ? citation.slice(0, comma) : citation;
-      const page = comma > 0 ? citation.slice(comma + 2) : "";
-      const already = keyNumbers.some(
-        (row) => row.value === figure && row.page === page && row.source === source,
-      );
-      if (already) continue;
-      keyNumbers.push({
-        label: plain(note.point).slice(0, 160),
-        value: figure,
-        source,
-        page,
-      });
-    }
-    keyNumbers.sort((left, right) => figureRank(left) - figureRank(right));
+    const keyNumbers = curateKeyNumbers(
+      output.keyNumbers.map((row) => ({
+        label: plain(row.label),
+        value: plain(row.value),
+        source: plain(row.source),
+        page: plain(row.page),
+      })),
+    );
+    const overallRating = highestRating(
+      output.scorecard.map((row) => ({
+        domain: row.domain,
+        rating: row.rating,
+        note: row.note,
+      })),
+    );
     const unreadPages = failedPages.map((page) => `${page} was not read after one retry.`);
+    const bottom = plain(output.bottomLine).replace(
+      /^(Low|Moderate|Elevated|High|Critical)\b/,
+      overallRating,
+    );
     return {
-      overallRating: output.overallRating,
-      bottomLine: plain(output.bottomLine),
+      overallRating,
+      bottomLine: bottom.startsWith(overallRating) ? bottom : `${overallRating}. ${bottom}`,
       scorecard: output.scorecard.map((row) => ({ ...row, note: plain(row.note) })),
       keyNumbers,
       findings: output.findings.map((row) => ({

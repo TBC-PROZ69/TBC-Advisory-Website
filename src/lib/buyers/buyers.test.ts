@@ -15,7 +15,7 @@ import {
 import { BuyersError } from "@/lib/buyers/errors";
 import { toIntake, type IntakeDraft } from "@/lib/buyers/intake";
 import { checklistAssessment } from "@/lib/buyers/assessment";
-import { chunksOf, coverageGaps } from "@/lib/buyers/assessment";
+import { chunksOf, coverageGaps, curateKeyNumbers, highestRating } from "@/lib/buyers/assessment";
 import { buyersPdfFilename, formatPdfFigures, parseReportForPdf, renderBuyerPdf } from "@/lib/buyers/pdf";
 import { buildBuyerReport } from "@/lib/buyers/report";
 import {
@@ -506,6 +506,33 @@ describe("buyer pdf", () => {
       "Reserves are 41% funded, cash $250,100, deficit ($18,400).",
     );
     expect(formatPdfFigures("reserve-study.pdf, page 4")).toBe("reserve-study.pdf, page 4");
+    expect(formatPdfFigures("$180 days", "value")).toBe("180 days");
+  });
+
+  it("keeps only decision figures and rates from the highest domain", () => {
+    const rows = curateKeyNumbers([
+      { label: "Document page indicator", value: "Page 5 of 70", source: "governing.pdf", page: "page 5" },
+      { label: "Owners receive written notice", value: "notice", source: "governing.pdf", page: "page 2" },
+      { label: "Insurance", value: "not in the documents", source: "budget.pdf", page: "page 1" },
+      { label: "Adopted operating budget", value: "$240,000", source: "financial.pdf", page: "page 1" },
+      { label: "Adopted operating budget", value: "$240,000", source: "financial.pdf", page: "page 1" },
+      { label: "Year-to-date deficit", value: "($18,400)", source: "financial.pdf", page: "page 3" },
+      { label: "Budgeted operating surplus", value: "$12,000", source: "financial.pdf", page: "page 1" },
+      { label: "Minimum lease", value: "$180 days", source: "governing.pdf", page: "page 5" },
+    ]);
+    expect(rows.some((row) => /page 5 of 70/i.test(row.value))).toBe(false);
+    expect(rows.some((row) => /not in the documents/i.test(row.value))).toBe(false);
+    expect(rows.find((row) => row.label.startsWith("Year-to-date deficit"))?.value).toBe(
+      "($18,400) vs $12,000 budgeted",
+    );
+    expect(rows.find((row) => row.label === "Minimum lease")?.value).toBe("180 days");
+    expect(rows.length).toBeLessThanOrEqual(20);
+    expect(
+      highestRating([
+        { domain: "Reserves and capital needs", rating: "High", note: "" },
+        { domain: "Insurance", rating: "Elevated", note: "" },
+      ]),
+    ).toBe("High");
   });
 
   it("puts every page in exactly one chunk, including a long last page", () => {

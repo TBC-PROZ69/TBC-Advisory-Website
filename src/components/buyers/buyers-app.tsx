@@ -47,6 +47,7 @@ export function BuyersApp({
   );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
 
   useEffect(() => {
     if (!stored?.report.id) return;
@@ -54,23 +55,35 @@ export function BuyersApp({
   }, [stored?.report.id]);
 
   useEffect(() => {
-    if (session.status !== "spent" || loadStoredResult(session.grantId)) return;
+    if (!preparing && (session.status !== "spent" || loadStoredResult(session.grantId))) return;
     let cancelled = false;
-    void (async () => {
+    async function tick() {
       const response = await fetch(`/api/buyers/report?t=${encodeURIComponent(token)}`);
       if (!response.ok || cancelled) return;
-      const data = (await response.json()) as { report?: BuyerReport; emailed?: boolean };
-      if (!data.report || cancelled) return;
-      saveStoredResult(session.grantId, {
-        report: data.report,
-        emailed: Boolean(data.emailed),
-        linkStatus: "spent",
-      });
-    })();
+      const data = (await response.json()) as {
+        report?: BuyerReport;
+        emailed?: boolean;
+        status?: string;
+      };
+      if (cancelled) return;
+      if (data.report) {
+        saveStoredResult(session.grantId, {
+          report: data.report,
+          emailed: Boolean(data.emailed),
+          linkStatus: "spent",
+        });
+        setPreparing(false);
+      } else if (data.status === "preparing") {
+        setPreparing(true);
+      }
+    }
+    void tick();
+    const timer = window.setInterval(() => void tick(), 5000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
-  }, [session.grantId, session.status, token]);
+  }, [preparing, session.grantId, session.status, token]);
 
   function update(recipe: (current: BuyerDraft) => BuyerDraft) {
     saveDraft(session.grantId, recipe(loadDraft(session.grantId)));
@@ -119,11 +132,19 @@ export function BuyersApp({
       });
       const data = (await response.json().catch(() => null)) as {
         error?: string;
+        status?: string;
         report?: BuyerReport;
         emailed?: boolean;
         linkStatus?: "active" | "spent";
       } | null;
-      if (!response.ok || !data?.report) {
+      if (!response.ok) {
+        throw new Error(data?.error || "The report could not be prepared.");
+      }
+      if (data?.status === "preparing") {
+        setPreparing(true);
+        return;
+      }
+      if (!data?.report) {
         throw new Error(data?.error || "The report could not be prepared.");
       }
       saveStoredResult(session.grantId, {
@@ -146,11 +167,10 @@ export function BuyersApp({
   if (session.status === "spent" && !report) {
     return (
       <Container className="max-w-2xl py-16">
-        <h1 className="font-heading text-4xl text-navy">This link has been used</h1>
+        <h1 className="font-heading text-4xl text-navy">Your report is being prepared.</h1>
         <p className="mt-4 text-base leading-relaxed text-navy/75">
-          This one-time link already produced a report. If you created it in this
-          browser, it will appear here when it is still saved. Otherwise contact{" "}
-          {site.email}. A new property needs a new link.
+          This page will show the report when it is ready. You can leave it open.
+          If it does not appear, contact {site.email}.
         </p>
       </Container>
     );
@@ -285,9 +305,9 @@ export function BuyersApp({
                     onBack={() => update((current) => ({ ...current, step: "intake" }))}
                     onSubmit={() => void submitReport()}
                   />
-                  {busy ? (
+                  {busy || preparing ? (
                     <p role="status" className="mt-4 text-sm text-navy">
-                      Analyzing your documents
+                      Your report is being prepared.
                     </p>
                   ) : null}
                   {error ? (

@@ -44,7 +44,8 @@ export function formatPdfFigures(value: string, mode: "prose" | "value" = "prose
     formatMoneyToken(token),
   );
   if (mode === "value") {
-    text = text.replace(/(?<![\d.,$])(-?\d{1,3}(?:,\d{3})+|-?\d{3,})(?:\.\d{1,2})?(?![\d%])/g, (token) => {
+    text = text.replace(/\$(\d[\d,]*)(\s+days?\b)/gi, "$1$2");
+    text = text.replace(/(?<![\d.,$])(-?\d{1,3}(?:,\d{3})+|-?\d{3,})(?:\.\d{1,2})?(?![\d%])(?!\s*days?\b)/gi, (token) => {
       if (/^(?:19|20)\d{2}$/.test(token)) return token;
       return formatMoneyToken(token);
     });
@@ -460,6 +461,7 @@ export async function renderBuyerPdf(report: BuyerReport) {
   heading("Summary rating");
   if (assessment) {
     paragraph(`${assessment.overallRating}. ${formatPdfFigures(assessment.bottomLine || report.summary)}`);
+    paragraph("The overall rating is the highest rating on the scorecard.");
     if (assessment.unavailable) paragraph(assessment.unavailable);
     heading("Scorecard");
     drawTable(
